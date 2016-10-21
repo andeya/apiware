@@ -69,7 +69,7 @@ func main() {
 
 # 结构体标签说明
 
-tag   |   sub    | required |     value     |   desc
+tag   |   key    | required |     value     |   desc
 ------|----------|----------|---------------|----------------------------------
 param |   type   | only one |     path      | when 'required' is unsetted, auto set it. e.g. url: "http://www.abc.com/a/{path}"
 param |   type   | only one |     query     | e.g. url: "http://www.abc.com/a?b={query}"
