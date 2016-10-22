@@ -12,15 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Package apiware provides a tools which can bind the http/fasthttp request parameters to the structure and validate.
+// Package apiware provides a tools which can bind the http/fasthttp request params to the structure and validate.
 package apiware
 
 import (
-	"errors"
 	"fmt"
 	"math"
-	"mime/multipart"
-	"net/http"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -28,31 +25,54 @@ import (
 	"sync"
 )
 
-/**
- * param tag value description:
- * tag   |   key    | required |     value     |   desc
- * ------|----------|----------|---------------|----------------------------------
- * param |   type   | only one |     path      | when `required` is unsetted, auto set it. e.g. url: "http://www.abc.com/a/{path}"
- * param |   type   | only one |     query     | e.g. url: "http://www.abc.com/a?b={query}"
- * param |   type   | only one |     formData  | e.g. "request body: a=123&b={formData}"
- * param |   type   | only one |     body      | request body can be any content
- * param |   type   | only one |     header    | request header info
- * param |   type   | only one |     cookie    | request cookie info, must be http.Cookie type
- * param |   name   |    no    |  (e.g. "id")  | specify request parameter`s name
- * param | required |    no    |   required    | request parameter is required
- * param |   desc   |    no    |  (e.g. "id")  | request parameter description
- * param |   len    |    no    | (e.g. 3:6, 3) | length range of parameter
- * param |   range  |    no    |  (e.g. 0:10)  | numerical range of parameter
- * param |  nonzero |    no    |    nonzero    | parameter`s value can not be zero
- * param |   maxmb  |    no    |   (e.g. 32)   | when request Content-Type is multipart/form-data, the max memory for body. (multi-parameter, whichever is greater)
- * regexp|          |    no    |(e.g. "^\\w+$")| parameter value can not be null
- *
- *  note:
- *    `regexp` or `param` tag is only usable when `param:"type(xxx)"` is exist.
- *     when tag!=`param:"-"`, anonymous field will be parsed.
- *     when param type is `formData` and field type is `multipart.FileHeader`, the field receives file uploaded.
- *     when param type is `cookie`, field type must be `http.Cookie`.
- */
+/*
+Param tag value description:
+    tag   |   key    | required |     value     |   desc
+    ------|----------|----------|---------------|----------------------------------
+    param |   type   | only one |     path      | if `required` is unsetted, auto set it. e.g. url: "http://www.abc.com/a/{path}"
+    param |   type   | only one |     query     | e.g. url: "http://www.abc.com/a?b={query}"
+    param |   type   | only one |     formData  | e.g. "request body: a=123&b={formData}"
+    param |   type   | only one |     body      | request body can be any content
+    param |   type   | only one |     header    | request header info
+    param |   type   | only one |     cookie    | request cookie info, support type: `http.Cookie`,`fasthttp.Cookie`,`string`,`[]byte`
+    param |   name   |    no    |  (e.g. "id")  | specify request param`s name
+    param | required |    no    |   required    | request param is required
+    param |   desc   |    no    |  (e.g. "id")  | request param description
+    param |   len    |    no    | (e.g. 3:6, 3) | length range of param
+    param |   range  |    no    |  (e.g. 0:10)  | numerical range of param
+    param |  nonzero |    no    |    nonzero    | param`s value can not be zero
+    param |   maxmb  |    no    |   (e.g. 32)   | when request Content-Type is multipart/form-data, the max memory for body.(multi-param, whichever is greater)
+    regexp|          |    no    |(e.g. "^\\w+$")| param value can not be null
+
+    note:
+        1. `regexp` or `param` tag is only usable when `param:"type(xxx)"` is exist;
+        2. if tag!=`param:"-"`, anonymous field will be parsed;
+        3. when param type is `formData` and field type is `multipart.FileHeader`, the field receives file uploaded;
+        4. if param type is `cookie`, field type must be `http.Cookie`;
+        5. `formData` and `body` params can not exist at the same time;
+        6. there should not be more than one `body` param;
+        7. the binding object must be a struct pointer;
+        8. the binding struct field type can not be a pointer.
+
+List of supported param value types:
+    base    |   slice    | special
+    --------|------------|-------------------------------------------------------
+    string  |  []string  | multipart.FileHeader (only for `formData` param)
+    byte    |  []byte    | http.Cookie (only for `net/http`'s `cookie` param)
+    uint8   |  []uint8   | fasthttp.Cookie (only for `fasthttp`'s `cookie` param)
+    bool    |  []bool    | [][]byte
+    int     |  []int     | [][]uint8
+    int8    |  []int8    | struct (struct type only for `body` param or as an anonymous field to extend params)
+    int16   |  []int16   |
+    int32   |  []int32   |
+    int64   |  []int64   |
+    uint8   |  []uint8   |
+    uint16  |  []uint16  |
+    uint32  |  []uint32  |
+    uint64  |  []uint64  |
+    float32 |  []float32 |
+    float64 |  []float64 |
+*/
 
 const (
 	TAG_PARAM        = "param"  //request param tag name
@@ -105,16 +125,27 @@ var (
 	defaultSchema = &Schema{
 		lib: map[string]Struct{},
 	}
-	fileTypeName   = reflect.TypeOf(multipart.FileHeader{}).Name()
-	cookieTypeName = reflect.TypeOf(http.Cookie{}).Name()
 )
 
-// Parse the structure object, get *Struct
-// if @paramNameFunc is not setted, paramNameFunc=toSnake
-func ToStruct(object interface{}, paramNameFunc ...ParamNameFunc) (*Struct, error) {
-	v := reflect.Indirect(reflect.ValueOf(object))
+const (
+	fileTypeString           = "multipart.FileHeader"
+	cookieTypeString         = "http.Cookie"
+	fasthttpCookieTypeString = "fasthttp.Cookie"
+	stringTypeString         = "string"
+	bytesTypeString          = "[]byte"
+	bytes2TypeString         = "[]uint8"
+)
+
+// Parse and store the structure object, requires a structure pointer,
+// if `paramNameFunc` is not setted, `paramNameFunc=toSnake`.
+func ToStruct(structReceiverPtr interface{}, paramNameFunc ...ParamNameFunc) (*Struct, error) {
+	v := reflect.ValueOf(structReceiverPtr)
+	if v.Kind() != reflect.Ptr {
+		return nil, NewError(reflect.TypeOf(structReceiverPtr).String(), "*", "the binding object must be a struct pointer")
+	}
+	v = reflect.Indirect(v)
 	if v.Kind() != reflect.Struct {
-		return nil, errors.New("[apiware] parameter object is not a struct")
+		return nil, NewError(reflect.TypeOf(structReceiverPtr).String(), "*", "the binding object must be a struct pointer")
 	}
 	t := v.Type()
 	m, ok := defaultSchema.Get(t.String())
@@ -156,8 +187,8 @@ func (schema *Schema) Set(m Struct) {
 	defer schema.Unlock()
 }
 
-// Parse the structure object, get *Struct
-// if @paramNameFunc is not setted, paramNameFunc=toSnake
+// Parse the structure object, requires a structure pointer,
+// if `paramNameFunc` is not setted, `paramNameFunc=toSnake`.
 func toStruct(t reflect.Type, v reflect.Value, paramNameFunc []ParamNameFunc) (*Struct, error) {
 	m := &Struct{
 		Name:   t.String(),
@@ -180,51 +211,79 @@ func toStruct(t reflect.Type, v reflect.Value, paramNameFunc []ParamNameFunc) (*
 func addFields(m *Struct, t reflect.Type, v reflect.Value, paramNameFunc ParamNameFunc) error {
 	var err error
 	var maxMemoryMB int64
+	var hasFormData, hasBody bool
 	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
+		var field = t.Field(i)
 
 		tag, ok := field.Tag.Lookup(TAG_PARAM)
-		if tag == TAG_IGNORE_PARAM {
-			continue
-		}
-		if field.Anonymous && field.Type.Kind() == reflect.Struct {
-			if err = addFields(m, field.Type, v.Field(i), paramNameFunc); err != nil {
-				return err
+		if !ok {
+			if field.Anonymous && field.Type.Kind() == reflect.Struct {
+				if err = addFields(m, field.Type, v.Field(i), paramNameFunc); err != nil {
+					return err
+				}
 			}
 			continue
 		}
-		if !ok {
+
+		if tag == TAG_IGNORE_PARAM {
 			continue
 		}
-		parsedTags := parseTags(tag)
-		// fmt.Printf("%#v\n", parsedTags)
-		paramType := parsedTags["type"]
-		if !ParamTypes[paramType] {
-			return errors.New("[apiware] it must be setted correctly, refer to the following: path/query/formData/body/header/cookie")
+
+		if field.Type.Kind() == reflect.Ptr {
+			return NewError(t.String(), field.Name, "field type can not be a pointer")
 		}
 
-		if field.Type.Name() == fileTypeName && paramType != "formData" {
-			return errors.New("invalid file parameter, it must be 'formData'")
+		var parsedTags = parseTags(tag)
+		var paramType = parsedTags["type"]
+		var fieldTypeString = field.Type.String()
+
+		switch fieldTypeString {
+		case fileTypeString:
+			if paramType != "formData" {
+				return NewError(t.String(), field.Name, "field value type is `"+fieldTypeString+"`, param type must be `formData`")
+			}
+		case cookieTypeString, fasthttpCookieTypeString:
+			if paramType != "cookie" {
+				return NewError(t.String(), field.Name, "field value type is `"+fieldTypeString+"`, param type must be `cookie`")
+			}
 		}
 
-		if (paramType == "cookie" && field.Type.Name() != cookieTypeName) ||
-			(paramType != "cookie" && field.Type.Name() == cookieTypeName) {
-			// fmt.Printf("cookie: %s %s %s\n%#v\n\n", paramType, field.Type.Name(), cookieTypeName, parsedTags)
-			return errors.New("[apiware] invalid cookie parameter, it must be 'cookie' and value type must be 'http.Cookie'")
+		switch paramType {
+		case "formData":
+			if hasBody {
+				return NewError(t.String(), field.Name, "`formData` and `body` params can not exist at the same time")
+			}
+			hasFormData = true
+		case "body":
+			if hasFormData {
+				return NewError(t.String(), field.Name, "`formData` and `body` params can not exist at the same time")
+			}
+			if hasBody {
+				return NewError(t.String(), field.Name, "there should not be more than one `body` param")
+			}
+			hasBody = true
+		case "path":
+			parsedTags["required"] = "required"
+		case "cookie":
+			switch fieldTypeString {
+			case cookieTypeString, fasthttpCookieTypeString, stringTypeString, bytesTypeString, bytes2TypeString:
+			default:
+				return NewError(t.String(), field.Name, "invalid field type for `cookie` param, refer to the following: `http.Cookie`, `fasthttp.Cookie`, `string`, `[]byte` or `[]uint8`")
+			}
+		default:
+			if !ParamTypes[paramType] {
+				return NewError(t.String(), field.Name, "invalid param type, refer to the following: `path`, `query`, `formData`, `body`, `header` or `cookie`")
+			}
 		}
 
 		if a, ok := parsedTags["maxmb"]; ok {
 			i, err := strconv.ParseInt(a, 10, 64)
 			if err != nil {
-				return errors.New("[apiware] invalid maxmb parameter, it must be positive integer")
+				return NewError(t.String(), field.Name, "invalid `maxmb` tag, it must be positive integer")
 			}
 			if i > maxMemoryMB {
 				maxMemoryMB = i
 			}
-		}
-
-		if paramType == "path" {
-			parsedTags["required"] = "required"
 		}
 
 		if r, ok := field.Tag.Lookup(TAG_REGEXP); ok {
@@ -244,7 +303,7 @@ func addFields(m *Struct, t reflect.Type, v reflect.Value, paramNameFunc ParamNa
 			fd.Name = paramNameFunc(field.Name)
 		}
 
-		fd.isFile = fd.Value.Type().Name() == fileTypeName
+		fd.isFile = fd.Value.Type().Name() == fileTypeString
 		_, fd.isRequired = parsedTags["required"]
 
 		m.Fields = append(m.Fields, fd)
@@ -288,7 +347,7 @@ func (model *Struct) Validate() error {
 	for _, field := range model.Fields {
 		err := field.Validate()
 		if err != nil {
-			return err
+			return NewError(model.Name, field.Name, err.Error())
 		}
 	}
 	return nil

@@ -64,3 +64,23 @@ func (e *ValidationError) Kind() int {
 func (e *ValidationError) Field() string {
 	return e.field
 }
+
+type Error struct {
+	Api    string `json:"api"`
+	Param  string `json:"param"`
+	Reason string `json:"reason"`
+}
+
+func NewError(api string, param string, reason string) *Error {
+	return &Error{
+		Api:    api,
+		Param:  param,
+		Reason: reason,
+	}
+}
+
+var _ error = new(Error)
+
+func (e *Error) Error() string {
+	return "[apiware] " + e.Api + " | " + e.Param + " | " + e.Reason
+}

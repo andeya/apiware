@@ -1,22 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"github.com/henrylee2cn/apiware"
-	// "mime/multipart"
-	"net/http"
 	"strings"
 )
 
-type IndexTest1 struct {
-	Id        int      `param:"type(path),required,desc(ID),range(1:2)"`
-	Num       float64  `param:"type(query),name(n),range(1.1:1.19)"`
-	Title     string   `param:"type(query),nonzero"`
-	Paragraph []string `param:"type(query),name(p),len(1:10)" regexp:"(^[\\w]*$)"`
-	// Picture   *multipart.FileHeader `param:"type(formData),name(pic),maxmb(30)"`
-}
-
-var Apiware = apiware.NewWithJSONBody(pathDecodeFunc)
+var myApiware = apiware.NewWithJSONBody(pathDecodeFunc)
 
 var pattern = "/test/:id"
 
@@ -39,25 +28,19 @@ func pathDecodeFunc(urlPath, pattern string) (pathParams map[string]string) {
 	return
 }
 
-func test1(resp http.ResponseWriter, req *http.Request) {
-	params := new(IndexTest1)
-	err := Apiware.BindParam(params, req, pattern)
-	b, _ := json.MarshalIndent(params, "", " ")
-	if err != nil {
-		resp.WriteHeader(http.StatusBadRequest)
-		resp.Write(append([]byte(err.Error()+"\n"), b...))
-	} else {
-		resp.WriteHeader(http.StatusOK)
-		resp.Write(b)
-	}
-}
-
 func main() {
-	// server
-	http.HandleFunc("/test/0", test1)
-	http.HandleFunc("/test/1", test1)
-	http.HandleFunc("/test/1.1", test1)
-	http.HandleFunc("/test/2", test1)
-	http.HandleFunc("/test/3", test1)
-	http.ListenAndServe(":7310", nil)
+	// Check whether these structs meet the requirements of apiware, and register them
+	err := myApiware.RegStruct(
+		new(httpTestApiware),
+		new(fasthttpTestApiware),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	// http server
+	go httpServer(":8080")
+
+	// fasthttp server
+	fasthttpServer(":8081")
 }
