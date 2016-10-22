@@ -18,6 +18,7 @@ package apiware
 import (
 	"errors"
 	"fmt"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"reflect"
@@ -313,9 +314,9 @@ func (field *StructField) Validate() (err error) {
 	}
 	// range
 	if tuple, ok := field.Tags["range"]; ok {
-		i, ok := field.Int()
+		f64, ok := field.Float()
 		if ok {
-			if err = validateRange(i, tuple, field.Name); err != nil {
+			if err = validateRange(f64, tuple, field.Name); err != nil {
 				return err
 			}
 		}
@@ -382,23 +383,27 @@ func validateLen(s, tuple, field string) error {
 	return nil
 }
 
-func validateRange(i int64, tuple, field string) error {
+const (
+	accuracy = 0.0000001
+)
+
+func validateRange(f64 float64, tuple, field string) error {
 	a, b := parseTuple(tuple)
 	if len(a) > 0 {
-		min, err := strconv.ParseInt(a, 10, 64)
+		min, err := strconv.ParseFloat(a, 64)
 		if err != nil {
 			return err
 		}
-		if i < min {
+		if math.Min(f64, min) == f64 && math.Abs(f64-min) > accuracy {
 			return NewValidationError(ValidationErrorValueTooSmall, field)
 		}
 	}
 	if len(b) > 0 {
-		max, err := strconv.ParseInt(b, 10, 64)
+		max, err := strconv.ParseFloat(b, 64)
 		if err != nil {
 			return err
 		}
-		if i > max {
+		if math.Max(f64, max) == f64 && math.Abs(f64-max) > accuracy {
 			return NewValidationError(ValidationErrorValueTooBig, field)
 		}
 	}
@@ -449,14 +454,16 @@ func (field *StructField) String() (string, bool) {
 	return t, ok
 }
 
-// Int returns the field int value and a bool flag indication if the conversion
+// Float returns the field int value and a bool flag indication if the conversion
 // was successful
-func (field *StructField) Int() (int64, bool) {
+func (field *StructField) Float() (float64, bool) {
 	switch field.Value.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return field.Value.Int(), true
+		return float64(field.Value.Int()), true
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return int64(field.Value.Uint()), true
+		return float64(field.Value.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return field.Value.Float(), true
 	}
 	return 0, false
 }

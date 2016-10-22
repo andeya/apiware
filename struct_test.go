@@ -51,12 +51,12 @@ func TestFieldIsZero(t *testing.T) {
 
 func TestFieldValidate(t *testing.T) {
 	type Schema struct {
-		A string `param:"type(path),len(3:6),name(p)"`
-		B int    `param:"type(query),range(10:20)"`
-		C string `param:"type(query),len(:4),nonzero"`
-		D string `param:"type(query)" regexp:"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"`
+		A string  `param:"type(path),len(3:6),name(p)"`
+		B float32 `param:"type(query),range(10:20)"`
+		C string  `param:"type(query),len(:4),nonzero"`
+		D string  `param:"type(query)" regexp:"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"`
 	}
-	m, _ := ToStruct(&Schema{}, toSnake)
+	m, _ := ToStruct(&Schema{B: 9.999999}, toSnake)
 	a := m.Fields[0]
 	if x := len(a.Tags); x != 4 {
 		t.Fatal("wrong len", x, a.Tags)
@@ -65,7 +65,7 @@ func TestFieldValidate(t *testing.T) {
 		t.Fatal("wrong value", x, ok)
 	}
 	if err := a.Validate(); err == nil || err.Error() != "p too short" {
-		t.Fatal("should not validate", err)
+		t.Fatal("should not validate")
 	}
 	a.Value = reflect.ValueOf("abc")
 	if err := a.Validate(); err != nil {

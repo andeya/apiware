@@ -16,8 +16,9 @@ import (
 )
 
 type IndexTest1 struct {
-    Id        int      `param:"type(path),required,desc(ID),range(1:1)"`
-    Title     string   `param:"type(query),required,nonzero,len(3:15)"`
+    Id        int      `param:"type(path),required,desc(ID),range(1:2)"`
+    Num       float64  `param:"type(query),name(n),range(1.1:1.19)"`
+    Title     string   `param:"type(query),nonzero"`
     Paragraph []string `param:"type(query),name(p),len(1:10)" regexp:"(^[\\w]*$)"`
     // Picture   *multipart.FileHeader `param:"type(formData),name(pic),maxmb(30)"`
 }
@@ -51,7 +52,7 @@ func test1(resp http.ResponseWriter, req *http.Request) {
     b, _ := json.MarshalIndent(params, "", " ")
     if err != nil {
         resp.WriteHeader(http.StatusBadRequest)
-        resp.Write(append([]byte(err.Error()+":\n"), b...))
+        resp.Write(append([]byte(err.Error()+"\n"), b...))
     } else {
         resp.WriteHeader(http.StatusOK)
         resp.Write(b)
@@ -62,7 +63,9 @@ func main() {
     // server
     http.HandleFunc("/test/0", test1)
     http.HandleFunc("/test/1", test1)
+    http.HandleFunc("/test/1.1", test1)
     http.HandleFunc("/test/2", test1)
+    http.HandleFunc("/test/3", test1)
     http.ListenAndServe(":7310", nil)
 }
 ```
