@@ -4,8 +4,7 @@ Apiware binds the specified parameters of the Golang `net/http` and `fasthttp` r
 
 It is suggested that you can use the struct as the Handler of the web framework, and use the middleware to quickly bind the request parameters, saving a lot of parameter type conversion and validity verification. At the same time through the struct tag, create swagger json configuration file, easy to create api document services.
 
-Apiware将Go语言net/http及fasthttp请求的指定参数绑定到结构体，并验证参数值的合法性。
-
+Apiware将Go语言`net/http`及`fasthttp`请求的指定参数绑定到结构体，并验证参数值的合法性。
 建议您可以使用结构体作为web框架的Handler，并用该中间件快速绑定请求参数，节省了大量参数类型转换与有效性验证的工作。同时还可以通过该结构体标签，创建swagger的json配置文件，轻松创建api文档服务。
 
 # Demo 示例
