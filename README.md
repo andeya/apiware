@@ -120,7 +120,7 @@ regexp|          |    no    |(e.g. "^\\w+$")| param value can not be null
 * 8. the binding struct field can not be a pointer.
 
 
-# Field Types 结构体字段类型范围
+# Field Types 结构体字段类型
 
 base type| slice type  | special type
 ---------|-------------|-------------------------------------------------------
