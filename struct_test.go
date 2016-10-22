@@ -140,7 +140,7 @@ func TestInterfaceToStructWithEmbedded(t *testing.T) {
 	}
 	type table struct {
 		ColPrimary int64 `param:"type(query)"`
-		embed      `param`
+		embed
 	}
 	table1 := &table{
 		6, embed{"Mrs. A", "infinite"},
