@@ -11,8 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-// Package apiware provides a tools which can bind the http/fasthttp request params to the structure and validate.
+
 package apiware
 
 import (

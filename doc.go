@@ -33,7 +33,7 @@ Param tag value description:
     param |   maxmb  |    no    |   (e.g. 32)   | when request Content-Type is multipart/form-data, the max memory for body.(multi-param, whichever is greater)
     regexp|          |    no    |(e.g. "^\\w+$")| param value can not be null
 
-    note:
+    NOTES:
         1. `regexp` or `param` tag is only usable when `param:"type(xxx)"` is exist;
         2. if tag!=`param:"-"`, anonymous field will be parsed;
         3. when param type is `formData` and field type is `multipart.FileHeader`, the field receives file uploaded;
