@@ -30,26 +30,26 @@ import (
  * param tag value description:
  * tag   |   key    | required |     value     |   desc
  * ------|----------|----------|---------------|----------------------------------
- * param |   type   | only one |     path      | when 'required' is unsetted, auto set it. e.g. url: "http://www.abc.com/a/{path}"
+ * param |   type   | only one |     path      | when `required` is unsetted, auto set it. e.g. url: "http://www.abc.com/a/{path}"
  * param |   type   | only one |     query     | e.g. url: "http://www.abc.com/a?b={query}"
  * param |   type   | only one |     formData  | e.g. "request body: a=123&b={formData}"
  * param |   type   | only one |     body      | request body can be any content
  * param |   type   | only one |     header    | request header info
  * param |   type   | only one |     cookie    | request cookie info, must be http.Cookie type
- * param |   name   |    no    |  (e.g. "id")  | specify request parameter's name
+ * param |   name   |    no    |  (e.g. "id")  | specify request parameter`s name
  * param | required |    no    |   required    | request parameter is required
  * param |   desc   |    no    |  (e.g. "id")  | request parameter description
  * param |   len    |    no    | (e.g. 3:6, 3) | length range of parameter
  * param |   range  |    no    |  (e.g. 0:10)  | numerical range of parameter
- * param |  nonzero |    no    |    nonzero    | parameter's value can not be zero
+ * param |  nonzero |    no    |    nonzero    | parameter`s value can not be zero
  * param |   maxmb  |    no    |   (e.g. 32)   | when request Content-Type is multipart/form-data, the max memory for body. (multi-parameter, whichever is greater)
  * regexp|          |    no    |(e.g. "^\\w+$")| parameter value can not be null
  *
  *  note:
- *    'regexp' or 'param' tag is only usable when 'param:"type(xxx)"' is exist.
+ *    `regexp` or `param` tag is only usable when `param:"type(xxx)"` is exist.
  *     when tag!=`param:"-"`, anonymous field will be parsed.
- *     when param type is 'formData' and field type is 'multipart.FileHeader', the field receives file uploaded.
- *     when param type is 'cookie', field type must be 'http.Cookie'.
+ *     when param type is `formData` and field type is `multipart.FileHeader`, the field receives file uploaded.
+ *     when param type is `cookie`, field type must be `http.Cookie`.
  */
 
 type (
