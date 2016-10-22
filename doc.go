@@ -41,7 +41,7 @@ Param tag value description:
         5. `formData` and `body` params can not exist at the same time;
         6. there should not be more than one `body` param;
         7. the binding object must be a struct pointer;
-        8. the binding struct field type can not be a pointer.
+        8. the binding struct field can not be a pointer.
 
 List of supported param value types:
     base    |   slice    | special

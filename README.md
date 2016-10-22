@@ -53,7 +53,7 @@ func pathDecodeFunc(urlPath, pattern string) (pathParams map[string]string) {
     return
 }
 
-func test1(resp http.ResponseWriter, req *http.Request) {
+func testHandler(resp http.ResponseWriter, req *http.Request) {
     // set cookies
     http.SetCookie(resp, &http.Cookie{
         Name:  "apiwareid",
@@ -74,18 +74,18 @@ func test1(resp http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-    // Check whether `test1` meet the requirements of apiware, and register it
+    // Check whether `testHandler` meet the requirements of apiware, and register it
     err := myApiware.RegStruct(new(TestApiware))
     if err != nil {
         panic(err)
     }
 
     // server
-    http.HandleFunc("/test/0", test1)
-    http.HandleFunc("/test/1", test1)
-    http.HandleFunc("/test/1.1", test1)
-    http.HandleFunc("/test/2", test1)
-    http.HandleFunc("/test/3", test1)
+    http.HandleFunc("/test/0", testHandler)
+    http.HandleFunc("/test/1", testHandler)
+    http.HandleFunc("/test/1.1", testHandler)
+    http.HandleFunc("/test/2", testHandler)
+    http.HandleFunc("/test/3", testHandler)
     http.ListenAndServe(":8080", nil)
 }
 ```
@@ -117,7 +117,7 @@ regexp|          |    no    |(e.g. "^\\w+$")| param value can not be null
 * 5. `formData` and `body` params can not exist at the same time;
 * 6. there should not be more than one `body` param;
 * 7. the binding object must be a struct pointer;
-* 8. the binding struct field type can not be a pointer.
+* 8. the binding struct field can not be a pointer.
 
 
 # Field Types 结构体字段类型范围

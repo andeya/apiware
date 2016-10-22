@@ -51,7 +51,7 @@ Param tag value description:
         5. `formData` and `body` params can not exist at the same time;
         6. there should not be more than one `body` param;
         7. the binding object must be a struct pointer;
-        8. the binding struct field type can not be a pointer.
+        8. the binding struct field can not be a pointer.
 
 List of supported param value types:
     base    |   slice    | special
@@ -229,7 +229,7 @@ func addFields(m *Struct, t reflect.Type, v reflect.Value, paramNameFunc ParamNa
 		}
 
 		if field.Type.Kind() == reflect.Ptr {
-			return NewError(t.String(), field.Name, "field type can not be a pointer")
+			return NewError(t.String(), field.Name, "field can not be a pointer")
 		}
 
 		var parsedTags = parseTags(tag)
@@ -239,11 +239,11 @@ func addFields(m *Struct, t reflect.Type, v reflect.Value, paramNameFunc ParamNa
 		switch fieldTypeString {
 		case fileTypeString:
 			if paramType != "formData" {
-				return NewError(t.String(), field.Name, "field value type is `"+fieldTypeString+"`, param type must be `formData`")
+				return NewError(t.String(), field.Name, "when field type is `"+fieldTypeString+"`, param type must be `formData`")
 			}
 		case cookieTypeString, fasthttpCookieTypeString:
 			if paramType != "cookie" {
-				return NewError(t.String(), field.Name, "field value type is `"+fieldTypeString+"`, param type must be `cookie`")
+				return NewError(t.String(), field.Name, "when field type is `"+fieldTypeString+"`, param type must be `cookie`")
 			}
 		}
 
