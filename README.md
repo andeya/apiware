@@ -105,14 +105,14 @@ param |   maxmb  |    no    |   (e.g. 32)   | when request Content-Type is multi
 regexp|          |    no    |(e.g. "^\\w+$")| param value can not be null
 
 note:
-    1. `regexp` or `param` tag is only usable when `param:"type(xxx)"` is exist;
-    2. if tag!=`param:"-"`, anonymous field will be parsed;
-    3. when param type is `formData` and field type is `multipart.FileHeader`, the field receives file uploaded;
-    4. if param type is `cookie`, field type must be `http.Cookie`;
-    5. `formData` and `body` params can not exist at the same time;
-    6. there should not be more than one `body` param;
-    7. the binding object must be a struct pointer;
-    8. the binding struct field type can not be a pointer.
+* 1. `regexp` or `param` tag is only usable when `param:"type(xxx)"` is exist;
+* 2. if tag!=`param:"-"`, anonymous field will be parsed;
+* 3. when param type is `formData` and field type is `multipart.FileHeader`, the field receives file uploaded;
+* 4. if param type is `cookie`, field type must be `http.Cookie`;
+* 5. `formData` and `body` params can not exist at the same time;
+* 6. there should not be more than one `body` param;
+* 7. the binding object must be a struct pointer;
+* 8. the binding struct field type can not be a pointer.
 
 
 # 结构体字段类型范围
