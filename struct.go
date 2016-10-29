@@ -17,12 +17,17 @@ package apiware
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math"
+	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/valyala/fasthttp"
 )
 
 /*
@@ -111,9 +116,14 @@ type (
 
 	// Struct represents a parsed schema interface{}.
 	Struct struct {
-		Name      string
-		Fields    []*StructField
+		Name   string
+		Fields []*StructField
+		//when request Content-Type is multipart/form-data, the max memory for body.
 		MaxMemory int64
+		//used to create a new struct (non-pointer)
+		structType reflect.Type
+		//the value of the struct (non-pointer)
+		structValue reflect.Value
 	}
 
 	// Schema is a collection of Struct
@@ -150,64 +160,65 @@ func ToStruct(structReceiverPtr interface{}, paramNameFunc ...ParamNameFunc) (*S
 		return nil, NewError(reflect.TypeOf(structReceiverPtr).String(), "*", "the binding object must be a struct pointer")
 	}
 	t := v.Type()
-	m, ok := defaultSchema.Get(t.String())
-	if !ok {
-		m, err := toStruct(t, v, paramNameFunc)
-		if err != nil {
-			return nil, err
+	name := t.String()
+	m, ok := defaultSchema.get(name)
+	if ok {
+		m.structValue = v
+		fields := make([]*StructField, len(m.Fields))
+		for i, field := range m.Fields {
+			fields[i] = &StructField{
+				Index:      field.Index,
+				Name:       field.Name,
+				Value:      v.Field(field.Index),
+				isRequired: field.isRequired,
+				isFile:     field.isFile,
+				Tags:       field.Tags,
+				RawTag:     field.RawTag,
+			}
 		}
-		defaultSchema.Set(*m)
-		return m, nil
+		m.Fields = fields
+		return &m, nil
 	}
 
-	fields := make([]*StructField, len(m.Fields))
-	for i, field := range m.Fields {
-		fields[i] = &StructField{
-			Index:      field.Index,
-			Name:       field.Name,
-			Value:      v.Field(field.Index),
-			isRequired: field.isRequired,
-			isFile:     field.isFile,
-			Tags:       field.Tags,
-			RawTag:     field.RawTag,
-		}
+	m.Name = name
+	m.Fields = []*StructField{}
+	m.structType = t
+	m.structValue = v
+
+	var err error
+	if len(paramNameFunc) > 0 {
+		err = addFields(&m, t, v, paramNameFunc[0])
+	} else {
+		err = addFields(&m, t, v, toSnake)
 	}
-	m.Fields = fields
+	if err != nil {
+		return nil, err
+	}
+	defaultSchema.set(m)
 	return &m, nil
 }
 
-func (schema *Schema) Get(typeName string) (Struct, bool) {
+// get the `Struct` object according to the type name
+func GetStruct(typeName string) (Struct, bool) {
+	return defaultSchema.get(typeName)
+}
+
+// cache `Struct`
+func SetStruct(m Struct) {
+	defaultSchema.set(m)
+}
+
+func (schema *Schema) get(typeName string) (Struct, bool) {
 	schema.RLock()
 	defer schema.RUnlock()
 	m, ok := schema.lib[typeName]
 	return m, ok
 }
 
-func (schema *Schema) Set(m Struct) {
+func (schema *Schema) set(m Struct) {
 	schema.Lock()
 	schema.lib[m.Name] = m
 	defer schema.Unlock()
-}
-
-// Parse the structure object, requires a structure pointer,
-// if `paramNameFunc` is not setted, `paramNameFunc=toSnake`.
-func toStruct(t reflect.Type, v reflect.Value, paramNameFunc []ParamNameFunc) (*Struct, error) {
-	m := &Struct{
-		Name:   t.String(),
-		Fields: []*StructField{},
-	}
-	var err error
-	// defer func() {
-	// 	if p := recover(); p != nil {
-	// 		err = fmt.Errorf("%v", p)
-	// 	}
-	// }()
-	if len(paramNameFunc) > 0 {
-		err = addFields(m, t, v, paramNameFunc[0])
-	} else {
-		err = addFields(m, t, v, toSnake)
-	}
-	return m, err
 }
 
 func addFields(m *Struct, t reflect.Type, v reflect.Value, paramNameFunc ParamNameFunc) error {
@@ -336,6 +347,288 @@ func parseTags(s string) map[string]string {
 	return m
 }
 
+// Create a copy `*Struct`
+func (model *Struct) Copy() *Struct {
+	var newStruct = new(Struct)
+	*newStruct = *model
+	newStruct.structValue = reflect.New(model.structType).Elem()
+	fields := make([]*StructField, len(model.Fields))
+	for i, field := range model.Fields {
+		fields[i] = &StructField{
+			Index:      field.Index,
+			Name:       field.Name,
+			Value:      newStruct.structValue.Field(field.Index),
+			isRequired: field.isRequired,
+			isFile:     field.isFile,
+			Tags:       field.Tags,
+			RawTag:     field.RawTag,
+		}
+	}
+	newStruct.Fields = fields
+	return newStruct
+}
+
+// Gets the object of the pointer type
+func (model *Struct) Interface() interface{} {
+	return model.structValue.Addr().Interface()
+}
+
+// Bind the net/http request params to the structure and validate.
+// If the struct has not been registered, it will be registered at the same time.
+// note: structReceiverPtr must be structure pointer.
+func (model *Struct) BindParam(
+	req *http.Request,
+	pattern string,
+	pathDecodeFunc PathDecodeFunc,
+	bodyDecodeFunc BodyDecodeFunc,
+) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = NewError(model.Name, "?", fmt.Sprint(p))
+		}
+	}()
+
+	var query, formValues url.Values
+	var params = pathDecodeFunc(req.URL.Path, pattern)
+	for _, field := range model.Fields {
+		switch field.Type() {
+		case "path":
+			paramValue, ok := params[field.Name]
+			if !ok {
+				return NewError(model.Name, field.Name, "missing path param")
+			}
+			// fmt.Printf("fieldName:%s\nvalue:%#v\n\n", field.Name, paramValue)
+			err = convertAssign(field.Value, []string{paramValue})
+			if err != nil {
+				return NewError(model.Name, field.Name, err.Error())
+			}
+
+		case "query":
+			if query == nil {
+				query = req.URL.Query()
+			}
+			paramValues, ok := query[field.Name]
+			if ok {
+				err = convertAssign(field.Value, paramValues)
+				if err != nil {
+					return NewError(model.Name, field.Name, err.Error())
+				}
+			} else if field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing query param")
+			}
+
+		case "formData":
+			// Can not exist with `body` param at the same time
+			if formValues == nil {
+				err = req.ParseMultipartForm(model.MaxMemory)
+				if err != nil {
+					return NewError(model.Name, field.Name, err.Error())
+				}
+				formValues = req.PostForm
+				if req.MultipartForm != nil {
+					for k, v := range req.MultipartForm.Value {
+						if _, ok := formValues[k]; ok {
+							formValues[k] = append(formValues[k], v...)
+						} else {
+							formValues[k] = v
+						}
+					}
+				}
+			}
+
+			if field.IsFile() && req.MultipartForm != nil && req.MultipartForm.File != nil {
+				fhs := req.MultipartForm.File[field.Name]
+				if len(fhs) == 0 {
+					if field.IsRequired() {
+						return NewError(model.Name, field.Name, "missing formData param")
+					}
+					continue
+				}
+				field.Value.Set(reflect.ValueOf(fhs[0]).Elem())
+				continue
+			}
+
+			paramValues, ok := formValues[field.Name]
+			if ok {
+				err = convertAssign(field.Value, paramValues)
+				if err != nil {
+					return NewError(model.Name, field.Name, err.Error())
+				}
+			} else if field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing formData param")
+			}
+
+		case "body":
+			// Theoretically there should be at most one `body` param, and can not exist with `formData` at the same time
+			body, err := ioutil.ReadAll(req.Body)
+			req.Body.Close()
+			if err == nil {
+				err = bodyDecodeFunc(field.Value, body)
+				if err != nil {
+					return NewError(model.Name, field.Name, err.Error())
+				}
+			} else if field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing body param")
+			}
+
+		case "header":
+			paramValues, ok := req.Header[field.Name]
+			if ok {
+				err = convertAssign(field.Value, paramValues)
+				if err != nil {
+					return NewError(model.Name, field.Name, err.Error())
+				}
+			} else if field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing header param")
+			}
+
+		case "cookie":
+			c, _ := req.Cookie(field.Name)
+			if c != nil {
+				switch field.Value.Type().String() {
+				case cookieTypeString:
+					field.Value.Set(reflect.ValueOf(c).Elem())
+
+				case stringTypeString:
+					field.Value.Set(reflect.ValueOf(c.String()))
+
+				case bytesTypeString, bytes2TypeString:
+					field.Value.Set(reflect.ValueOf([]byte(c.String())))
+
+				default:
+					return NewError(model.Name, field.Name, "invalid cookie param type, it must be `http.Cookie`, `string` or `[]byte`")
+				}
+			} else if field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing cookie param")
+			}
+		}
+	}
+	return model.Validate()
+}
+
+// Bind the fasthttp request params to the structure and validate.
+// If the struct has not been registered, it will be registered at the same time.
+// note: structReceiverPtr must be structure pointer.
+func (model *Struct) FasthttpBindParam(
+	reqCtx *fasthttp.RequestCtx,
+	pattern string,
+	pathDecodeFunc PathDecodeFunc,
+	bodyDecodeFunc BodyDecodeFunc,
+) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = NewError(model.Name, "?", fmt.Sprint(p))
+		}
+	}()
+
+	var formValues = fasthttpFormValues(reqCtx)
+	var params = pathDecodeFunc(string(reqCtx.Path()), pattern)
+	for _, field := range model.Fields {
+		switch field.Type() {
+		case "path":
+			paramValue, ok := params[field.Name]
+			if !ok {
+				return NewError(model.Name, field.Name, "missing path param")
+			}
+			// fmt.Printf("fieldName:%s\nvalue:%#v\n\n", field.Name, paramValue)
+			err = convertAssign(field.Value, []string{paramValue})
+			if err != nil {
+				return NewError(model.Name, field.Name, err.Error())
+			}
+
+		case "query":
+			paramValuesBytes := reqCtx.QueryArgs().PeekMulti(field.Name)
+			if len(paramValuesBytes) > 0 {
+				var paramValues = make([]string, len(paramValuesBytes))
+				for i, b := range paramValuesBytes {
+					paramValues[i] = string(b)
+				}
+				err = convertAssign(field.Value, paramValues)
+				if err != nil {
+					return NewError(model.Name, field.Name, err.Error())
+				}
+			} else if len(paramValuesBytes) == 0 && field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing query param")
+			}
+
+		case "formData":
+			// Can not exist with `body` param at the same time
+			if field.IsFile() {
+				fh, err := reqCtx.FormFile(field.Name)
+				if err != nil {
+					if field.IsRequired() {
+						return NewError(model.Name, field.Name, "missing formData param")
+					}
+					continue
+				}
+				field.Value.Set(reflect.ValueOf(fh).Elem())
+				continue
+			}
+
+			paramValues, ok := formValues[field.Name]
+			if ok {
+				err = convertAssign(field.Value, paramValues)
+				if err != nil {
+					return NewError(model.Name, field.Name, err.Error())
+				}
+			} else if field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing formData param")
+			}
+
+		case "body":
+			// Theoretically there should be at most one `body` param, and can not exist with `formData` at the same time
+			body := reqCtx.PostBody()
+			if body != nil {
+				err = bodyDecodeFunc(field.Value, body)
+				if err != nil {
+					return NewError(model.Name, field.Name, err.Error())
+				}
+			} else if field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing body param")
+			}
+
+		case "header":
+			paramValueBytes := reqCtx.Request.Header.Peek(field.Name)
+			if paramValueBytes != nil {
+				err = convertAssign(field.Value, []string{string(paramValueBytes)})
+				if err != nil {
+					return NewError(model.Name, field.Name, err.Error())
+				}
+			} else if field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing header param")
+			}
+
+		case "cookie":
+			bcookie := reqCtx.Request.Header.Cookie(field.Name)
+			if bcookie != nil {
+				switch field.Value.Type().String() {
+				case fasthttpCookieTypeString:
+					c := fasthttp.AcquireCookie()
+					defer fasthttp.ReleaseCookie(c)
+					err = c.ParseBytes(bcookie)
+					if err != nil {
+						return NewError(model.Name, field.Name, err.Error())
+					}
+					field.Value.Set(reflect.ValueOf(*c))
+
+				case stringTypeString:
+					field.Value.Set(reflect.ValueOf(string(bcookie)))
+
+				case bytesTypeString, bytes2TypeString:
+					field.Value.Set(reflect.ValueOf(bcookie))
+
+				default:
+					return NewError(model.Name, field.Name, "invalid cookie param type, it must be `fasthttp.Cookie`, `string` or `[]byte`")
+				}
+
+			} else if field.IsRequired() {
+				return NewError(model.Name, field.Name, "missing cookie param")
+			}
+		}
+	}
+	return model.Validate()
+}
+
 // Validate validates the provided struct
 func Validate(f interface{}) error {
 	model, err := ToStruct(f)
@@ -349,6 +642,7 @@ func Validate(f interface{}) error {
 	return nil
 }
 
+// Validate validates the provided struct
 func (model *Struct) Validate() error {
 	for _, field := range model.Fields {
 		err := field.Validate()
@@ -397,7 +691,6 @@ func (field *StructField) Validate() (err error) {
 			return NewValidationError(ValidationErrorValueNotSet, field.Name)
 		}
 	}
-
 	// regexp
 	if reg, ok := field.Tags[TAG_REGEXP]; ok {
 		s, ok := field.String()
@@ -409,86 +702,6 @@ func (field *StructField) Validate() (err error) {
 	}
 
 	return
-}
-
-func parseTuple(tuple string) (string, string) {
-	c := strings.Split(tuple, ":")
-	var a, b string
-	switch len(c) {
-	case 1:
-		a = c[0]
-		if len(a) > 0 {
-			return a, a
-		}
-	case 2:
-		a = c[0]
-		b = c[1]
-		if len(a) > 0 || len(b) > 0 {
-			return a, b
-		}
-	}
-	panic("invalid validation tuple")
-}
-
-func validateLen(s, tuple, field string) error {
-	a, b := parseTuple(tuple)
-	if len(a) > 0 {
-		min, err := strconv.Atoi(a)
-		if err != nil {
-			panic(err)
-		}
-		if len(s) < min {
-			return NewValidationError(ValidationErrorValueTooShort, field)
-		}
-	}
-	if len(b) > 0 {
-		max, err := strconv.Atoi(b)
-		if err != nil {
-			panic(err)
-		}
-		if len(s) > max {
-			return NewValidationError(ValidationErrorValueTooLong, field)
-		}
-	}
-	return nil
-}
-
-const (
-	accuracy = 0.0000001
-)
-
-func validateRange(f64 float64, tuple, field string) error {
-	a, b := parseTuple(tuple)
-	if len(a) > 0 {
-		min, err := strconv.ParseFloat(a, 64)
-		if err != nil {
-			return err
-		}
-		if math.Min(f64, min) == f64 && math.Abs(f64-min) > accuracy {
-			return NewValidationError(ValidationErrorValueTooSmall, field)
-		}
-	}
-	if len(b) > 0 {
-		max, err := strconv.ParseFloat(b, 64)
-		if err != nil {
-			return err
-		}
-		if math.Max(f64, max) == f64 && math.Abs(f64-max) > accuracy {
-			return NewValidationError(ValidationErrorValueTooBig, field)
-		}
-	}
-	return nil
-}
-
-func validateRegexp(s, reg, field string) error {
-	matched, err := regexp.MatchString(reg, s)
-	if err != nil {
-		return err
-	}
-	if !matched {
-		return NewValidationError(ValidationErrorValueNotMatch, field)
-	}
-	return nil
 }
 
 // Type returns the type value for the field
@@ -538,15 +751,108 @@ func (field *StructField) Float() (float64, bool) {
 	return 0, false
 }
 
-// func (field *StructField) GoDeclaration() string {
-// 	t := ""
-// 	if x := field.RawTag; len(x) > 0 {
-// 		t = fmt.Sprintf("\t`%s`", x)
-// 	}
-// 	return fmt.Sprintf(
-// 		"%s\t%s%s",
-// 		field.Name,
-// 		reflect.TypeOf(field.Value).String(),
-// 		t,
-// 	)
-// }
+func parseTuple(tuple string) (string, string) {
+	c := strings.Split(tuple, ":")
+	var a, b string
+	switch len(c) {
+	case 1:
+		a = c[0]
+		if len(a) > 0 {
+			return a, a
+		}
+	case 2:
+		a = c[0]
+		b = c[1]
+		if len(a) > 0 || len(b) > 0 {
+			return a, b
+		}
+	}
+	panic("invalid validation tuple")
+}
+
+func validateLen(s, tuple, field string) error {
+	a, b := parseTuple(tuple)
+	if len(a) > 0 {
+		min, err := strconv.Atoi(a)
+		if err != nil {
+			panic(err)
+		}
+		if len(s) < min {
+			return NewValidationError(ValidationErrorValueTooShort, field)
+		}
+	}
+	if len(b) > 0 {
+		max, err := strconv.Atoi(b)
+		if err != nil {
+			panic(err)
+		}
+		if len(s) > max {
+			return NewValidationError(ValidationErrorValueTooLong, field)
+		}
+	}
+	return nil
+}
+
+const accuracy = 0.0000001
+
+func validateRange(f64 float64, tuple, field string) error {
+	a, b := parseTuple(tuple)
+	if len(a) > 0 {
+		min, err := strconv.ParseFloat(a, 64)
+		if err != nil {
+			return err
+		}
+		if math.Min(f64, min) == f64 && math.Abs(f64-min) > accuracy {
+			return NewValidationError(ValidationErrorValueTooSmall, field)
+		}
+	}
+	if len(b) > 0 {
+		max, err := strconv.ParseFloat(b, 64)
+		if err != nil {
+			return err
+		}
+		if math.Max(f64, max) == f64 && math.Abs(f64-max) > accuracy {
+			return NewValidationError(ValidationErrorValueTooBig, field)
+		}
+	}
+	return nil
+}
+
+func validateRegexp(s, reg, field string) error {
+	matched, err := regexp.MatchString(reg, s)
+	if err != nil {
+		return err
+	}
+	if !matched {
+		return NewValidationError(ValidationErrorValueNotMatch, field)
+	}
+	return nil
+}
+
+// fasthttpFormValues returns all post data values with their keys
+// multipart, formValues data, post arguments
+func fasthttpFormValues(reqCtx *fasthttp.RequestCtx) (valuesAll map[string][]string) {
+	valuesAll = make(map[string][]string)
+	// first check if we have multipart formValues
+	multipartForm, err := reqCtx.MultipartForm()
+	if err == nil {
+		//we have multipart formValues
+		return multipartForm.Value
+	}
+	// if no multipart and post arguments ( means normal formValues   )
+	if reqCtx.PostArgs().Len() == 0 {
+		return // no found
+	}
+	reqCtx.PostArgs().VisitAll(func(k []byte, v []byte) {
+		key := string(k)
+		value := string(v)
+		// for slices
+		if valuesAll[key] != nil {
+			valuesAll[key] = append(valuesAll[key], value)
+		} else {
+			valuesAll[key] = []string{value}
+		}
+
+	})
+	return
+}
