@@ -51,20 +51,20 @@ func TestFieldIsZero(t *testing.T) {
 
 func TestFieldValidate(t *testing.T) {
 	type Schema struct {
-		A string  `param:"type(path),len(3:6),name(p)"`
+		A string  `param:"type(path),len(3:6),name(p)" err:"This is a custom error!"`
 		B float32 `param:"type(query),range(10:20)"`
 		C string  `param:"type(query),len(:4),nonzero"`
 		D string  `param:"type(query)" regexp:"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"`
 	}
 	m, _ := ToStruct(&Schema{B: 9.999999}, toSnake)
 	a := m.Fields[0]
-	if x := len(a.Tags); x != 4 {
+	if x := len(a.Tags); x != 5 {
 		t.Fatal("wrong len", x, a.Tags)
 	}
 	if x, ok := a.Tags["len"]; !ok || x != "3:6" {
 		t.Fatal("wrong value", x, ok)
 	}
-	if err := a.Validate(); err == nil || err.Error() != "p too short" {
+	if err := a.Validate(); err == nil || err.Error() != "This is a custom error!" {
 		t.Fatal("should not validate")
 	}
 	a.Value = reflect.ValueOf("abc")
@@ -72,7 +72,7 @@ func TestFieldValidate(t *testing.T) {
 		t.Fatal("should validate", err)
 	}
 	a.Value = reflect.ValueOf("abcdefg")
-	if err := a.Validate(); err == nil || err.Error() != "p too long" {
+	if err := a.Validate(); err == nil || err.Error() != "This is a custom error!" {
 		t.Fatal("should not validate")
 	}
 

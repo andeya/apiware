@@ -15,6 +15,7 @@
 package apiware
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -42,6 +43,7 @@ Param tag value description:
     param |  nonzero |    no    |    nonzero    | param`s value can not be zero
     param |   maxmb  |    no    |   (e.g. 32)   | when request Content-Type is multipart/form-data, the max memory for body.(multi-param, whichever is greater)
     regexp|          |    no    |(e.g. "^\\w+$")| param value can not be null
+    err   |          |    no    |(e.g. "incorrect password format")| customize the prompt for validation error
 
     NOTES:
         1. the binding object must be a struct pointer
@@ -76,6 +78,7 @@ List of supported param value types:
 const (
 	TAG_PARAM        = "param"  //request param tag name
 	TAG_REGEXP       = "regexp" //regexp validate tag name(optio)
+	TAG_ERR          = "err"    //customize the prompt for validation error(optio)
 	TAG_IGNORE_PARAM = "-"      //ignore request param tag value
 
 	MB                 = 1 << 20 // 1MB
@@ -286,7 +289,11 @@ func addFields(m *Struct, t reflect.Type, v reflect.Value, paramNameFunc ParamNa
 		}
 
 		if r, ok := field.Tag.Lookup(TAG_REGEXP); ok {
-			parsedTags["regexp"] = r
+			parsedTags[TAG_REGEXP] = r
+		}
+
+		if errStr, ok := field.Tag.Lookup(TAG_ERR); ok {
+			parsedTags[TAG_ERR] = errStr
 		}
 
 		// fmt.Printf("%#v\n", parsedTags)
@@ -356,7 +363,12 @@ func (model *Struct) Validate() error {
 // int the TAG_REGEXP struct tag
 func (field *StructField) Validate() (err error) {
 	defer func() {
-		if p := recover(); p != nil {
+		p := recover()
+		if errStr, ok := field.Tags[TAG_ERR]; ok {
+			if err != nil {
+				err = errors.New(errStr)
+			}
+		} else if p != nil {
 			err = fmt.Errorf("%v", p)
 		}
 	}()
@@ -387,7 +399,7 @@ func (field *StructField) Validate() (err error) {
 	}
 
 	// regexp
-	if reg, ok := field.Tags["regexp"]; ok {
+	if reg, ok := field.Tags[TAG_REGEXP]; ok {
 		s, ok := field.String()
 		if ok {
 			if err = validateRegexp(s, reg, field.Name); err != nil {

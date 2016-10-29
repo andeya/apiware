@@ -32,6 +32,7 @@ Param tag value description:
     param |  nonzero |    no    |    nonzero    | param`s value can not be zero
     param |   maxmb  |    no    |   (e.g. 32)   | when request Content-Type is multipart/form-data, the max memory for body.(multi-param, whichever is greater)
     regexp|          |    no    |(e.g. "^\\w+$")| param value can not be null
+    err   |          |    no    |(e.g. "incorrect password format")| customize the prompt for validation error
 
     NOTES:
         1. the binding object must be a struct pointer
