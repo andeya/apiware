@@ -16,6 +16,7 @@ package apiware
 
 import (
 	"bytes"
+	"encoding/json"
 	"reflect"
 	"strings"
 )
@@ -56,4 +57,14 @@ func snakeToUpperCamel(s string) string {
 		}
 	}
 	return buf.String()
+}
+
+func bodyJONS(fieldValue reflect.Value, body []byte) error {
+	var err error
+	if fieldValue.Kind() == reflect.Ptr {
+		err = json.Unmarshal(body, fieldValue.Interface())
+	} else {
+		err = json.Unmarshal(body, fieldValue.Addr().Interface())
+	}
+	return err
 }

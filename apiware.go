@@ -15,10 +15,8 @@
 package apiware
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
-	"reflect"
 
 	"github.com/valyala/fasthttp"
 )
@@ -32,48 +30,26 @@ type (
 
 	// Parse path params function, return pathParams of `[tag]:[value]` format
 	PathDecodeFunc func(urlPath, pattern string) (pathParams map[string]string)
-
-	// Create param name from struct field name
-	ParamNameFunc func(fieldName string) (paramName string)
-
-	// Decode params from request body
-	BodyDecodeFunc func(fieldValue reflect.Value, body []byte) error
 )
 
-// Create a new apiware engine
-func New(pathDecodeFunc PathDecodeFunc, bodyDecodeFunc BodyDecodeFunc, paramNameFunc ...ParamNameFunc) *Apiware {
-	var _paramNameFunc ParamNameFunc
-	if len(paramNameFunc) == 0 {
-		_paramNameFunc = toSnake
-	}
+// Create a new apiware engine.
+// Parse and store the struct object, requires a struct pointer,
+// if `paramNameFunc` is nil, `paramNameFunc=toSnake`,
+// if `bodyDecodeFunc` is nil, `bodyDecodeFunc=bodyJONS`,
+func New(pathDecodeFunc PathDecodeFunc, bodyDecodeFunc BodyDecodeFunc, paramNameFunc ParamNameFunc) *Apiware {
 	return &Apiware{
+		ParamNameFunc:  paramNameFunc,
 		PathDecodeFunc: pathDecodeFunc,
 		BodyDecodeFunc: bodyDecodeFunc,
-		ParamNameFunc:  _paramNameFunc,
 	}
-}
-
-// New middleware engine, and the default use json form at to decode the body
-func NewWithJSONBody(pathDecodeFunc PathDecodeFunc, paramNameFunc ...ParamNameFunc) *Apiware {
-	var bodyDecodeFunc BodyDecodeFunc = func(fieldValue reflect.Value, body []byte) error {
-		var err error
-		if fieldValue.Kind() == reflect.Ptr {
-			err = json.Unmarshal(body, fieldValue.Interface())
-		} else {
-			err = json.Unmarshal(body, fieldValue.Addr().Interface())
-		}
-		return err
-	}
-
-	return New(pathDecodeFunc, bodyDecodeFunc, paramNameFunc...)
 }
 
 // Check whether structs meet the requirements of apiware, and register them.
 // note: requires a structure pointer.
-func (a *Apiware) RegStruct(structReceiverPtr ...interface{}) error {
+func (a *Apiware) Register(structPointers ...interface{}) error {
 	var errStr string
-	for _, obj := range structReceiverPtr {
-		_, err := ToStruct(obj, a.ParamNameFunc)
+	for _, obj := range structPointers {
+		err := Register(obj, a.ParamNameFunc, a.BodyDecodeFunc)
 		if err != nil {
 			errStr += err.Error() + "\n"
 		}
@@ -85,23 +61,17 @@ func (a *Apiware) RegStruct(structReceiverPtr ...interface{}) error {
 }
 
 // Bind the net/http request params to the structure and validate.
-// If the struct has not been registered, it will be registered at the same time.
-// note: structReceiverPtr must be structure pointer.
-func (a *Apiware) BindParam(structReceiverPtr interface{}, req *http.Request, pattern string) (err error) {
-	obj, err := ToStruct(structReceiverPtr, a.ParamNameFunc)
-	if err != nil {
-		return err
-	}
-	return obj.BindParam(req, a.PathDecodeFunc(req.URL.Path, pattern), a.BodyDecodeFunc)
+// note: structPointer must be structure pointer.
+func (a *Apiware) Bind(
+	structPointer interface{},
+	req *http.Request,
+	pattern string,
+) error {
+	return Bind(structPointer, req, a.PathDecodeFunc(req.URL.Path, pattern))
 }
 
 // Bind the fasthttp request params to the structure and validate.
-// If the struct has not been registered, it will be registered at the same time.
-// note: structReceiverPtr must be structure pointer.
-func (a *Apiware) FasthttpBindParam(structReceiverPtr interface{}, reqCtx *fasthttp.RequestCtx, pattern string) (err error) {
-	obj, err := ToStruct(structReceiverPtr, a.ParamNameFunc)
-	if err != nil {
-		return err
-	}
-	return obj.FasthttpBindParam(reqCtx, a.PathDecodeFunc(string(reqCtx.Path()), pattern), a.BodyDecodeFunc)
+// note: structPointer must be structure pointer.
+func (a *Apiware) FasthttpBind(structPointer interface{}, reqCtx *fasthttp.RequestCtx, pattern string) (err error) {
+	return FasthttpBind(structPointer, reqCtx, a.PathDecodeFunc(string(reqCtx.Path()), pattern))
 }

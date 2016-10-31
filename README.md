@@ -30,7 +30,7 @@ type TestApiware struct {
     // Picture   multipart.FileHeader `param:"type(formData),name(pic),maxmb(30)"`
 }
 
-var myApiware = apiware.NewWithJSONBody(pathDecodeFunc)
+var myApiware = apiware.New(pathDecodeFunc, nil, nil)
 
 var pattern = "/test/:id"
 
@@ -62,7 +62,7 @@ func testHandler(resp http.ResponseWriter, req *http.Request) {
 
     // bind params
     params := new(TestApiware)
-    err := myApiware.BindParam(params, req, pattern)
+    err := myApiware.Bind(params, req, pattern)
     b, _ := json.MarshalIndent(params, "", " ")
     if err != nil {
         resp.WriteHeader(http.StatusBadRequest)
@@ -75,7 +75,7 @@ func testHandler(resp http.ResponseWriter, req *http.Request) {
 
 func main() {
     // Check whether `testHandler` meet the requirements of apiware, and register it
-    err := myApiware.RegStruct(new(TestApiware))
+    err := myApiware.Register(new(TestApiware))
     if err != nil {
         panic(err)
     }
@@ -103,8 +103,8 @@ param |   type   | only one |     cookie    | request cookie info, support type:
 param |   name   |    no    |  (e.g. "id")  | specify request param`s name
 param | required |    no    |   required    | request param is required
 param |   desc   |    no    |  (e.g. "id")  | request param description
-param |   len    |    no    | (e.g. 3:6, 3) | length range of param
-param |   range  |    no    |  (e.g. 0:10)  | numerical range of param
+param |   len    |    no    | (e.g. 3:6, 3) | length range of param's value
+param |   range  |    no    |  (e.g. 0:10)  | numerical range of param's value
 param |  nonzero |    no    |    nonzero    | param`s value can not be zero
 param |   maxmb  |    no    |   (e.g. 32)   | when request Content-Type is multipart/form-data, the max memory for body.(multi-param, whichever is greater)
 regexp|          |    no    |(e.g. "^\\w+$")| param value can not be null
@@ -112,31 +112,30 @@ err   |          |    no    |(e.g. "incorrect password format")| customize the p
 
 **NOTES**:
 * 1. the binding object must be a struct pointer
-* 2. the binding struct field can not be a pointer
+* 2. the binding struct's field can not be a pointer
 * 3. `regexp` or `param` tag is only usable when `param:"type(xxx)"` is exist
 * 4. if the `param` tag is not exist, anonymous field will be parsed
-* 5. when param type is `formData` and field type is `multipart.FileHeader`, the field receives file uploaded
-* 6. if param type is `cookie`, field type must be `http.Cookie`
+* 5. when the param's type is `formData` and the field's type is `multipart.FileHeader`, the param receives file uploaded
+* 6. if param's type is `cookie`, field's type must be `http.Cookie`
 * 7. `formData` and `body` params can not exist at the same time
 * 8. there should not be more than one `body` param
 
-
 # Field Types 结构体字段类型
 
-base type| slice type  | special type
----------|-------------|-------------------------------------------------------
-`string`  |  `[]string`  | `[][]byte`
-`byte`    |  `[]byte`    | `[][]uint8`
-`uint8`   |  `[]uint8`   | `multipart.FileHeader` (only for `formData` param)param)
-`bool`    |  `[]bool`    | `http.Cookie` (only for `net/http`'s `cookie` param)
-`int`     |  `[]int`     | `fasthttp.Cookie` (only for `fasthttp`'s `cookie` 
-`int8`    |  `[]int8`    | `struct` (struct type only for `body` param or as an anonymous field to extend params)
-`int16`   |  `[]int16`   |
-`int32`   |  `[]int32`   |
-`int64`   |  `[]int64`   |
-`uint8`   |  `[]uint8`   |
-`uint16`  |  `[]uint16`  |
-`uint32`  |  `[]uint32`  |
-`uint64`  |  `[]uint64`  |
-`float32` |  `[]float32` |
-`float64` |  `[]float64` |
+base    |   slice    | special
+--------|------------|-------------------------------------------------------
+string  |  []string  | [][]byte
+byte    |  []byte    | [][]uint8
+uint8   |  []uint8   | multipart.FileHeader (only for `formData` param)
+bool    |  []bool    | http.Cookie (only for `net/http`'s `cookie` param)
+int     |  []int     | fasthttp.Cookie (only for `fasthttp`'s `cookie` param)
+int8    |  []int8    | struct (struct type only for `body` param or as an anonymous field to extend params)
+int16   |  []int16   |
+int32   |  []int32   |
+int64   |  []int64   |
+uint8   |  []uint8   |
+uint16  |  []uint16  |
+uint32  |  []uint32  |
+uint64  |  []uint64  |
+float32 |  []float32 |
+float64 |  []float64 |

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-var myApiware = apiware.NewWithJSONBody(pathDecodeFunc)
+var myApiware = apiware.New(pathDecodeFunc, nil, nil)
 
 var pattern = "/test/:id"
 
@@ -30,7 +30,7 @@ func pathDecodeFunc(urlPath, pattern string) (pathParams map[string]string) {
 
 func main() {
 	// Check whether these structs meet the requirements of apiware, and register them
-	err := myApiware.RegStruct(
+	err := myApiware.Register(
 		new(httpTestApiware),
 		new(fasthttpTestApiware),
 	)

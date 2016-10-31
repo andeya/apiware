@@ -27,8 +27,8 @@ Param tag value description:
     param |   name   |    no    |  (e.g. "id")  | specify request param`s name
     param | required |    no    |   required    | request param is required
     param |   desc   |    no    |  (e.g. "id")  | request param description
-    param |   len    |    no    | (e.g. 3:6, 3) | length range of param
-    param |   range  |    no    |  (e.g. 0:10)  | numerical range of param
+    param |   len    |    no    | (e.g. 3:6, 3) | length range of param's value
+    param |   range  |    no    |  (e.g. 0:10)  | numerical range of param's value
     param |  nonzero |    no    |    nonzero    | param`s value can not be zero
     param |   maxmb  |    no    |   (e.g. 32)   | when request Content-Type is multipart/form-data, the max memory for body.(multi-param, whichever is greater)
     regexp|          |    no    |(e.g. "^\\w+$")| param value can not be null
@@ -36,11 +36,11 @@ Param tag value description:
 
     NOTES:
         1. the binding object must be a struct pointer
-        2. the binding struct field can not be a pointer
+        2. the binding struct's field can not be a pointer
         3. `regexp` or `param` tag is only usable when `param:"type(xxx)"` is exist
         4. if the `param` tag is not exist, anonymous field will be parsed
-        5. when param type is `formData` and field type is `multipart.FileHeader`, the field receives file uploaded
-        6. if param type is `cookie`, field type must be `http.Cookie`
+        5. when the param's type is `formData` and the field's type is `multipart.FileHeader`, the param receives file uploaded
+        6. if param's type is `cookie`, field's type must be `http.Cookie`
         7. `formData` and `body` params can not exist at the same time
         8. there should not be more than one `body` param
 

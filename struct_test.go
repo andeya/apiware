@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestParseTags(t *testing.T) {
+func TestParsetags(t *testing.T) {
 	m := parseTags(`type(path),required,desc(banana)`)
 	if x, ok := m["required"]; !ok {
 		t.Fatal("wrong value", ok, x)
@@ -18,106 +18,90 @@ func TestParseTags(t *testing.T) {
 }
 
 func TestFieldIsZero(t *testing.T) {
-	field := &StructField{}
-	field.Value = reflect.ValueOf(0)
-	if !field.IsZero() {
+	if !isZero(reflect.ValueOf(0)) {
 		t.Fatal("should be zero")
 	}
-	field.Value = reflect.ValueOf("")
-	if !field.IsZero() {
+	if !isZero(reflect.ValueOf("")) {
 		t.Fatal("should be zero")
 	}
-	field.Value = reflect.ValueOf(false)
-	if !field.IsZero() {
+	if !isZero(reflect.ValueOf(false)) {
 		t.Fatal("should be zero")
 	}
-	field.Value = reflect.ValueOf(true)
-	if field.IsZero() {
+	if isZero(reflect.ValueOf(true)) {
 		t.Fatal("should not be zero")
 	}
-	field.Value = reflect.ValueOf(-1)
-	if field.IsZero() {
+	if isZero(reflect.ValueOf(-1)) {
 		t.Fatal("should not be zero")
 	}
-	field.Value = reflect.ValueOf(1)
-	if field.IsZero() {
+	if isZero(reflect.ValueOf(1)) {
 		t.Fatal("should not be zero")
 	}
-	field.Value = reflect.ValueOf("asdf")
-	if field.IsZero() {
+	if isZero(reflect.ValueOf("asdf")) {
 		t.Fatal("should not be zero")
 	}
 }
 
-func TestFieldValidate(t *testing.T) {
+func TestFieldvalidate(t *testing.T) {
 	type Schema struct {
 		A string  `param:"type(path),len(3:6),name(p)" err:"This is a custom error!"`
 		B float32 `param:"type(query),range(10:20)"`
 		C string  `param:"type(query),len(:4),nonzero"`
 		D string  `param:"type(query)" regexp:"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"`
 	}
-	m, _ := ToStruct(&Schema{B: 9.999999}, toSnake)
-	a := m.Fields[0]
-	if x := len(a.Tags); x != 5 {
-		t.Fatal("wrong len", x, a.Tags)
+	m, _ := NewParamsAPI(&Schema{B: 9.999999}, nil, nil)
+	a := m.params[0]
+	if x := len(a.tags); x != 5 {
+		t.Fatal("wrong len", x, a.tags)
 	}
-	if x, ok := a.Tags["len"]; !ok || x != "3:6" {
+	if x, ok := a.tags["len"]; !ok || x != "3:6" {
 		t.Fatal("wrong value", x, ok)
 	}
-	if err := a.Validate(); err == nil || err.Error() != "This is a custom error!" {
+	if err := a.validate(a.rawValue); err == nil || err.Error() != "This is a custom error!" {
 		t.Fatal("should not validate")
 	}
-	a.Value = reflect.ValueOf("abc")
-	if err := a.Validate(); err != nil {
+	if err := a.validate(reflect.ValueOf("abc")); err != nil {
 		t.Fatal("should validate", err)
 	}
-	a.Value = reflect.ValueOf("abcdefg")
-	if err := a.Validate(); err == nil || err.Error() != "This is a custom error!" {
+	if err := a.validate(reflect.ValueOf("abcdefg")); err == nil || err.Error() != "This is a custom error!" {
 		t.Fatal("should not validate")
 	}
 
-	b := m.Fields[1]
-	if x := len(b.Tags); x != 2 {
+	b := m.params[1]
+	if x := len(b.tags); x != 2 {
 		t.Fatal("wrong len", x)
 	}
-	if err := b.Validate(); err == nil || err.Error() != "b too small" {
+	if err := b.validate(b.rawValue); err == nil || err.Error() != "b too small" {
 		t.Fatal("should not validate")
 	}
-	b.Value = reflect.ValueOf(10)
-	if err := b.Validate(); err != nil {
+	if err := b.validate(reflect.ValueOf(10)); err != nil {
 		t.Fatal("should validate", err)
 	}
-	b.Value = reflect.ValueOf(21)
-	if err := b.Validate(); err == nil || err.Error() != "b too big" {
+	if err := b.validate(reflect.ValueOf(21)); err == nil || err.Error() != "b too big" {
 		t.Fatal("should not validate")
 	}
 
-	c := m.Fields[2]
-	if x := len(c.Tags); x != 3 {
+	c := m.params[2]
+	if x := len(c.tags); x != 3 {
 		t.Fatal("wrong len", x)
 	}
-	if err := c.Validate(); err == nil || err.Error() != "c not set" {
+	if err := c.validate(c.rawValue); err == nil || err.Error() != "c not set" {
 		t.Fatal("should not validate")
 	}
-	c.Value = reflect.ValueOf("a")
-	if err := c.Validate(); err != nil {
+	if err := c.validate(reflect.ValueOf("a")); err != nil {
 		t.Fatal("should validate", err)
 	}
-	c.Value = reflect.ValueOf("abcde")
-	if err := c.Validate(); err == nil || err.Error() != "c too long" {
+	if err := c.validate(reflect.ValueOf("abcde")); err == nil || err.Error() != "c too long" {
 		t.Fatal("should not validate")
 	}
 
-	d := m.Fields[3]
-	if x := len(d.Tags); x != 2 {
+	d := m.params[3]
+	if x := len(d.tags); x != 2 {
 		t.Fatal("wrong len", x)
 	}
-	d.Value = reflect.ValueOf("gggg@gmail.com")
-	if err := d.Validate(); err != nil {
+	if err := d.validate(reflect.ValueOf("gggg@gmail.com")); err != nil {
 		t.Fatal("should validate", err)
 	}
-	d.Value = reflect.ValueOf("www.google.com")
-	if err := d.Validate(); err == nil || err.Error() != "d not match" {
+	if err := d.validate(reflect.ValueOf("www.google.com")); err == nil || err.Error() != "d not match" {
 		t.Fatal("should not validate", err)
 	}
 }
@@ -127,31 +111,39 @@ func TestFieldOmit(t *testing.T) {
 		A string `param:"-"`
 		B string
 	}
-	m, _ := ToStruct(&schema{}, toSnake)
-	if x := len(m.Fields); x != 0 {
+	m, _ := NewParamsAPI(&schema{}, nil, nil)
+	if x := len(m.params); x != 0 {
 		t.Fatal("wrong len", x)
 	}
 }
 
-func TestInterfaceToStructWithEmbedded(t *testing.T) {
+func TestInterfaceNewParamsAPIWithEmbedded(t *testing.T) {
+	type third struct {
+		Num int64 `param:"type(query)"`
+	}
 	type embed struct {
 		Name  string `param:"type(query)"`
 		Value string `param:"type(query)"`
+		third
 	}
 	type table struct {
 		ColPrimary int64 `param:"type(query)"`
 		embed
 	}
 	table1 := &table{
-		6, embed{"Mrs. A", "infinite"},
+		6, embed{"Mrs. A", "infinite", third{Num: 12345}},
 	}
-	m, err := ToStruct(table1, toSnake)
+	m, err := NewParamsAPI(table1, nil, nil)
 	if err != nil {
 		t.Fatal("error not nil", err)
 	}
-	f := m.Fields[1]
-	if x, ok := f.String(); !ok || x != "Mrs. A" {
+	f := m.params[1]
+	if x, ok := toString(f.rawValue); !ok || x != "Mrs. A" {
 		t.Fatal("wrong value from embedded struct")
+	}
+	f = m.params[3]
+	if x, _ := f.Raw().(int64); x != 12345 {
+		t.Fatal("wrong value from third struct")
 	}
 }
 
@@ -161,28 +153,28 @@ type indexedTable struct {
 	ColTime       time.Time
 }
 
-func TestInterfaceToStruct(t *testing.T) {
+func TestInterfaceNewParamsAPI(t *testing.T) {
 	now := time.Now()
 	table1 := &indexedTable{
 		ColVarChar: "orange",
 		ColTime:    now,
 	}
-	m, err := ToStruct(table1, toSnake)
+	m, err := NewParamsAPI(table1, nil, nil)
 	if err != nil {
 		t.Fatal("error not nil", err)
 	}
-	if x := len(m.Fields); x != 2 {
+	if x := len(m.params); x != 2 {
 		t.Fatal("wrong value", x)
 	}
-	f := m.Fields[0]
+	f := m.params[0]
 	if !f.IsRequired() {
 		t.Fatal("wrong value")
 	}
-	f = m.Fields[1]
-	if x, ok := f.String(); !ok || x != "orange" {
+	f = m.params[1]
+	if x, ok := toString(f.rawValue); !ok || x != "orange" {
 		t.Fatal("wrong value", x)
 	}
-	if f.IsZero() {
+	if isZero(f.rawValue) {
 		t.Fatal("wrong value")
 	}
 	if f.Description() != "banana" {
@@ -199,4 +191,12 @@ func makeWhitespaceVisible(s string) string {
 	s = strings.Replace(s, "\r", "\\r", -1)
 	s = strings.Replace(s, "\n", "\\n", -1)
 	return s
+}
+func isZero(v reflect.Value) bool {
+	return v.Interface() == reflect.Zero(v.Type()).Interface()
+}
+
+func toString(v reflect.Value) (string, bool) {
+	s, ok := v.Interface().(string)
+	return s, ok
 }

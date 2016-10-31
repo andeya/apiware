@@ -25,7 +25,7 @@ func fasthttpTestHandler(ctx *fasthttp.RequestCtx) {
 
 	// bind params
 	params := new(fasthttpTestApiware)
-	err := myApiware.FasthttpBindParam(params, ctx, pattern)
+	err := myApiware.FasthttpBind(params, ctx, pattern)
 	b, _ := json.MarshalIndent(params, "", " ")
 
 	if err != nil {

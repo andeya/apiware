@@ -25,7 +25,7 @@ func httpTestHandler(resp http.ResponseWriter, req *http.Request) {
 
 	// bind params
 	params := new(httpTestApiware)
-	err := myApiware.BindParam(params, req, pattern)
+	err := myApiware.Bind(params, req, pattern)
 	b, _ := json.MarshalIndent(params, "", " ")
 
 	if err != nil {
