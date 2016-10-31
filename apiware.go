@@ -92,7 +92,7 @@ func (a *Apiware) BindParam(structReceiverPtr interface{}, req *http.Request, pa
 	if err != nil {
 		return err
 	}
-	return obj.BindParam(req, pattern, a.PathDecodeFunc, a.BodyDecodeFunc)
+	return obj.BindParam(req, a.PathDecodeFunc(req.URL.Path, pattern), a.BodyDecodeFunc)
 }
 
 // Bind the fasthttp request params to the structure and validate.
@@ -103,5 +103,5 @@ func (a *Apiware) FasthttpBindParam(structReceiverPtr interface{}, reqCtx *fasth
 	if err != nil {
 		return err
 	}
-	return obj.FasthttpBindParam(reqCtx, pattern, a.PathDecodeFunc, a.BodyDecodeFunc)
+	return obj.FasthttpBindParam(reqCtx, a.PathDecodeFunc(string(reqCtx.Path()), pattern), a.BodyDecodeFunc)
 }

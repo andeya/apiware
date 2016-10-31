@@ -20,7 +20,6 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
-	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -378,22 +377,24 @@ func (model *Struct) Interface() interface{} {
 // note: structReceiverPtr must be structure pointer.
 func (model *Struct) BindParam(
 	req *http.Request,
-	pattern string,
-	pathDecodeFunc PathDecodeFunc,
+	pathParams map[string]string,
 	bodyDecodeFunc BodyDecodeFunc,
 ) (err error) {
+	if err = req.ParseForm(); err != nil {
+		return NewError(model.Name, "*", err.Error())
+	}
+	if pathParams == nil {
+		pathParams = map[string]string{}
+	}
 	defer func() {
 		if p := recover(); p != nil {
 			err = NewError(model.Name, "?", fmt.Sprint(p))
 		}
 	}()
-
-	var query, formValues url.Values
-	var params = pathDecodeFunc(req.URL.Path, pattern)
 	for _, field := range model.Fields {
 		switch field.Type() {
 		case "path":
-			paramValue, ok := params[field.Name]
+			paramValue, ok := pathParams[field.Name]
 			if !ok {
 				return NewError(model.Name, field.Name, "missing path param")
 			}
@@ -404,10 +405,7 @@ func (model *Struct) BindParam(
 			}
 
 		case "query":
-			if query == nil {
-				query = req.URL.Query()
-			}
-			paramValues, ok := query[field.Name]
+			paramValues, ok := req.Form[field.Name]
 			if ok {
 				err = convertAssign(field.Value, paramValues)
 				if err != nil {
@@ -419,20 +417,10 @@ func (model *Struct) BindParam(
 
 		case "formData":
 			// Can not exist with `body` param at the same time
-			if formValues == nil {
+			if req.MultipartForm == nil {
 				err = req.ParseMultipartForm(model.MaxMemory)
 				if err != nil {
 					return NewError(model.Name, field.Name, err.Error())
-				}
-				formValues = req.PostForm
-				if req.MultipartForm != nil {
-					for k, v := range req.MultipartForm.Value {
-						if _, ok := formValues[k]; ok {
-							formValues[k] = append(formValues[k], v...)
-						} else {
-							formValues[k] = v
-						}
-					}
 				}
 			}
 
@@ -448,7 +436,7 @@ func (model *Struct) BindParam(
 				continue
 			}
 
-			paramValues, ok := formValues[field.Name]
+			paramValues, ok := req.Form[field.Name]
 			if ok {
 				err = convertAssign(field.Value, paramValues)
 				if err != nil {
@@ -511,10 +499,12 @@ func (model *Struct) BindParam(
 // note: structReceiverPtr must be structure pointer.
 func (model *Struct) FasthttpBindParam(
 	reqCtx *fasthttp.RequestCtx,
-	pattern string,
-	pathDecodeFunc PathDecodeFunc,
+	pathParams map[string]string,
 	bodyDecodeFunc BodyDecodeFunc,
 ) (err error) {
+	if pathParams == nil {
+		pathParams = map[string]string{}
+	}
 	defer func() {
 		if p := recover(); p != nil {
 			err = NewError(model.Name, "?", fmt.Sprint(p))
@@ -522,11 +512,10 @@ func (model *Struct) FasthttpBindParam(
 	}()
 
 	var formValues = fasthttpFormValues(reqCtx)
-	var params = pathDecodeFunc(string(reqCtx.Path()), pattern)
 	for _, field := range model.Fields {
 		switch field.Type() {
 		case "path":
-			paramValue, ok := params[field.Name]
+			paramValue, ok := pathParams[field.Name]
 			if !ok {
 				return NewError(model.Name, field.Name, "missing path param")
 			}
@@ -831,17 +820,17 @@ func validateRegexp(s, reg, field string) error {
 
 // fasthttpFormValues returns all post data values with their keys
 // multipart, formValues data, post arguments
-func fasthttpFormValues(reqCtx *fasthttp.RequestCtx) (valuesAll map[string][]string) {
-	valuesAll = make(map[string][]string)
+func fasthttpFormValues(reqCtx *fasthttp.RequestCtx) map[string][]string {
 	// first check if we have multipart formValues
 	multipartForm, err := reqCtx.MultipartForm()
 	if err == nil {
 		//we have multipart formValues
 		return multipartForm.Value
 	}
+	valuesAll := make(map[string][]string)
 	// if no multipart and post arguments ( means normal formValues   )
 	if reqCtx.PostArgs().Len() == 0 {
-		return // no found
+		return valuesAll // no found
 	}
 	reqCtx.PostArgs().VisitAll(func(k []byte, v []byte) {
 		key := string(k)
@@ -852,7 +841,6 @@ func fasthttpFormValues(reqCtx *fasthttp.RequestCtx) (valuesAll map[string][]str
 		} else {
 			valuesAll[key] = []string{value}
 		}
-
 	})
-	return
+	return valuesAll
 }
