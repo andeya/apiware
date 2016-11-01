@@ -9,7 +9,7 @@ var myApiware = apiware.New(pathDecodeFunc, nil, nil)
 
 var pattern = "/test/:id"
 
-func pathDecodeFunc(urlPath, pattern string) (pathParams map[string]string) {
+func pathDecodeFunc(urlPath, pattern string) apiware.KV {
 	idx := map[int]string{}
 	for k, v := range strings.Split(pattern, "/") {
 		if !strings.HasPrefix(v, ":") {
@@ -17,7 +17,7 @@ func pathDecodeFunc(urlPath, pattern string) (pathParams map[string]string) {
 		}
 		idx[k] = v[1:]
 	}
-	pathParams = make(map[string]string, len(idx))
+	pathParams := make(map[string]string, len(idx))
 	for k, v := range strings.Split(urlPath, "/") {
 		name, ok := idx[k]
 		if !ok {
@@ -25,7 +25,7 @@ func pathDecodeFunc(urlPath, pattern string) (pathParams map[string]string) {
 		}
 		pathParams[name] = v
 	}
-	return
+	return apiware.Map(pathParams)
 }
 
 func main() {

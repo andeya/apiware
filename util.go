@@ -68,3 +68,15 @@ func bodyJONS(fieldValue reflect.Value, body []byte) error {
 	}
 	return err
 }
+
+type (
+	KV interface {
+		Get(k string) (v string, found bool)
+	}
+	Map map[string]string
+)
+
+func (m Map) Get(k string) (string, bool) {
+	v, found := m[k]
+	return v, found
+}

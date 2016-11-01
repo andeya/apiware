@@ -28,8 +28,8 @@ type (
 		BodyDecodeFunc
 	}
 
-	// Parse path params function, return pathParams of `[tag]:[value]` format
-	PathDecodeFunc func(urlPath, pattern string) (pathParams map[string]string)
+	// Parse path params function, return pathParams of KV type
+	PathDecodeFunc func(urlPath, pattern string) (pathParams KV)
 )
 
 // Create a new apiware engine.

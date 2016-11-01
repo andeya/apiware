@@ -319,7 +319,7 @@ func (paramsAPI *ParamsAPI) Raw() interface{} {
 func BindByName(
 	paramsAPIName string,
 	req *http.Request,
-	pathParams map[string]string,
+	pathParams KV,
 ) (
 	paramStruct reflect.Value,
 	err error,
@@ -338,7 +338,7 @@ func BindByName(
 func Bind(
 	structPointer interface{},
 	req *http.Request,
-	pathParams map[string]string,
+	pathParams KV,
 ) error {
 	paramsAPI, err := GetParamsAPI(reflect.TypeOf(structPointer).String())
 	if err != nil {
@@ -352,7 +352,7 @@ func Bind(
 func (paramsAPI *ParamsAPI) BindAt(
 	structPointer interface{},
 	req *http.Request,
-	pathParams map[string]string,
+	pathParams KV,
 ) error {
 	name := reflect.TypeOf(structPointer).String()
 	if name != paramsAPI.name {
@@ -364,7 +364,7 @@ func (paramsAPI *ParamsAPI) BindAt(
 // Bind the net/http request params to a struct pointer and validate it.
 func (paramsAPI *ParamsAPI) BindNew(
 	req *http.Request,
-	pathParams map[string]string,
+	pathParams KV,
 ) (
 	paramStruct reflect.Value,
 	err error,
@@ -378,7 +378,7 @@ func (paramsAPI *ParamsAPI) BindNew(
 func (paramsAPI *ParamsAPI) bind(
 	paramStructElem reflect.Value,
 	req *http.Request,
-	pathParams map[string]string,
+	pathParams KV,
 ) (
 	err error,
 ) {
@@ -387,7 +387,7 @@ func (paramsAPI *ParamsAPI) bind(
 	}
 
 	if pathParams == nil {
-		pathParams = map[string]string{}
+		pathParams = Map(map[string]string{})
 	}
 
 	defer func() {
@@ -403,7 +403,7 @@ func (paramsAPI *ParamsAPI) bind(
 		}
 		switch param.Type() {
 		case "path":
-			paramValue, ok := pathParams[param.name]
+			paramValue, ok := pathParams.Get(param.name)
 			if !ok {
 				return NewError(paramsAPI.name, param.name, "missing path param")
 			}
@@ -505,7 +505,7 @@ func (paramsAPI *ParamsAPI) bind(
 func FasthttpBindByName(
 	paramsAPIName string,
 	reqCtx *fasthttp.RequestCtx,
-	pathParams map[string]string,
+	pathParams KV,
 ) (
 	paramStruct reflect.Value,
 	err error,
@@ -524,7 +524,7 @@ func FasthttpBindByName(
 func FasthttpBind(
 	structPointer interface{},
 	reqCtx *fasthttp.RequestCtx,
-	pathParams map[string]string,
+	pathParams KV,
 ) error {
 	paramsAPI, err := GetParamsAPI(reflect.TypeOf(structPointer).String())
 	if err != nil {
@@ -538,7 +538,7 @@ func FasthttpBind(
 func (paramsAPI *ParamsAPI) FasthttpBindAt(
 	structPointer interface{},
 	reqCtx *fasthttp.RequestCtx,
-	pathParams map[string]string,
+	pathParams KV,
 ) error {
 	name := reflect.TypeOf(structPointer).String()
 	if name != paramsAPI.name {
@@ -550,7 +550,7 @@ func (paramsAPI *ParamsAPI) FasthttpBindAt(
 // Bind the fasthttp request params to a struct pointer and validate it.
 func (paramsAPI *ParamsAPI) FasthttpBindNew(
 	reqCtx *fasthttp.RequestCtx,
-	pathParams map[string]string,
+	pathParams KV,
 ) (
 	paramStruct reflect.Value,
 	err error,
@@ -564,12 +564,12 @@ func (paramsAPI *ParamsAPI) FasthttpBindNew(
 func (paramsAPI *ParamsAPI) fasthttpBind(
 	paramStructElem reflect.Value,
 	reqCtx *fasthttp.RequestCtx,
-	pathParams map[string]string,
+	pathParams KV,
 ) (
 	err error,
 ) {
 	if pathParams == nil {
-		pathParams = map[string]string{}
+		pathParams = Map(map[string]string{})
 	}
 
 	defer func() {
@@ -586,7 +586,7 @@ func (paramsAPI *ParamsAPI) fasthttpBind(
 		}
 		switch param.Type() {
 		case "path":
-			paramValue, ok := pathParams[param.name]
+			paramValue, ok := pathParams.Get(param.name)
 			if !ok {
 				return NewError(paramsAPI.name, param.name, "missing path param")
 			}
