@@ -350,7 +350,7 @@ func BindByName(
 		return
 	}
 	paramStruct = reflect.New(paramsAPI.structType)
-	err = paramsAPI.bind(
+	err = paramsAPI.BindFields(
 		paramsAPI.usefulFields(paramStruct.Elem()),
 		req,
 		pathParams,
@@ -369,7 +369,7 @@ func Bind(
 	if err != nil {
 		return err
 	}
-	return paramsAPI.bind(
+	return paramsAPI.BindFields(
 		paramsAPI.usefulFields(reflect.ValueOf(structPointer).Elem()),
 		req,
 		pathParams,
@@ -387,7 +387,7 @@ func (paramsAPI *ParamsAPI) BindAt(
 	if name != paramsAPI.name {
 		return errors.New("the structPointer's type `" + name + "` does not match type `" + paramsAPI.name + "`")
 	}
-	return paramsAPI.bind(
+	return paramsAPI.BindFields(
 		paramsAPI.usefulFields(reflect.ValueOf(structPointer).Elem()),
 		req,
 		pathParams,
@@ -403,12 +403,13 @@ func (paramsAPI *ParamsAPI) BindNew(
 	err error,
 ) {
 	paramStruct, fields := paramsAPI.NewReceiver()
-	err = paramsAPI.bind(fields, req, pathParams)
+	err = paramsAPI.BindFields(fields, req, pathParams)
 	return
 }
 
 // Bind the net/http request params to a struct and validate it.
-func (paramsAPI *ParamsAPI) bind(
+// Must ensure that the param `fields` matches `paramsAPI.params`.
+func (paramsAPI *ParamsAPI) BindFields(
 	fields []reflect.Value,
 	req *http.Request,
 	pathParams KV,
@@ -545,7 +546,7 @@ func FasthttpBindByName(
 		return
 	}
 	paramStruct = reflect.New(paramsAPI.structType)
-	err = paramsAPI.fasthttpBind(
+	err = paramsAPI.FasthttpBindFields(
 		paramsAPI.usefulFields(paramStruct.Elem()),
 		reqCtx,
 		pathParams,
@@ -564,7 +565,7 @@ func FasthttpBind(
 	if err != nil {
 		return err
 	}
-	return paramsAPI.fasthttpBind(
+	return paramsAPI.FasthttpBindFields(
 		paramsAPI.usefulFields(reflect.ValueOf(structPointer).Elem()),
 		reqCtx,
 		pathParams,
@@ -582,7 +583,7 @@ func (paramsAPI *ParamsAPI) FasthttpBindAt(
 	if name != paramsAPI.name {
 		return errors.New("the structPointer's type `" + name + "` does not match type `" + paramsAPI.name + "`")
 	}
-	return paramsAPI.fasthttpBind(
+	return paramsAPI.FasthttpBindFields(
 		paramsAPI.usefulFields(reflect.ValueOf(structPointer).Elem()),
 		reqCtx,
 		pathParams,
@@ -598,12 +599,13 @@ func (paramsAPI *ParamsAPI) FasthttpBindNew(
 	err error,
 ) {
 	paramStruct, fields := paramsAPI.NewReceiver()
-	err = paramsAPI.fasthttpBind(fields, reqCtx, pathParams)
+	err = paramsAPI.FasthttpBindFields(fields, reqCtx, pathParams)
 	return
 }
 
 // Bind the fasthttp request params to the struct and validate.
-func (paramsAPI *ParamsAPI) fasthttpBind(
+// Must ensure that the param `fields` matches `paramsAPI.params`.
+func (paramsAPI *ParamsAPI) FasthttpBindFields(
 	fields []reflect.Value,
 	reqCtx *fasthttp.RequestCtx,
 	pathParams KV,
