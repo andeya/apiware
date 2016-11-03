@@ -55,6 +55,36 @@ var (
 	}
 )
 
+// Get the param's original value
+func (param *Param) Raw() interface{} {
+	return param.rawValue.Interface()
+}
+
+// Get parameter field name
+func (param *Param) Name() string {
+	return param.name
+}
+
+// Get the type value for the param
+func (param *Param) Type() string {
+	return param.tags["type"]
+}
+
+// IsRequired tests if the param is declared
+func (param *Param) IsRequired() bool {
+	return param.isRequired
+}
+
+// Get the description value for the param
+func (param *Param) Description() string {
+	return param.tags["desc"]
+}
+
+// IsFile tests if the param is type *multipart.FileHeader
+func (param *Param) IsFile() bool {
+	return param.isFile
+}
+
 func (param *Param) validate(value reflect.Value) error {
 	if value.Kind() != reflect.Slice {
 		return param.validateElem(value)
@@ -117,31 +147,6 @@ func (param *Param) validateElem(value reflect.Value) (err error) {
 		}
 	}
 	return
-}
-
-// Type returns the type value for the param
-func (param *Param) Type() string {
-	return param.tags["type"]
-}
-
-// IsRequired tests if the param is declared
-func (param *Param) IsRequired() bool {
-	return param.isRequired
-}
-
-// Description returns the description value for the param
-func (param *Param) Description() string {
-	return param.tags["desc"]
-}
-
-// IsFile tests if the param is type *multipart.FileHeader
-func (param *Param) IsFile() bool {
-	return param.isFile
-}
-
-// return the param's original value
-func (param *Param) Raw() interface{} {
-	return param.rawValue.Interface()
 }
 
 func parseTuple(tuple string) (string, string) {

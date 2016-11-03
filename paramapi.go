@@ -306,8 +306,14 @@ func (schema *Schema) set(m *ParamsAPI) {
 	defer schema.Unlock()
 }
 
+// Get the name
 func (paramsAPI *ParamsAPI) Name() string {
 	return paramsAPI.name
+}
+
+// Get the parameter information
+func (paramsAPI *ParamsAPI) Params() []*Param {
+	return paramsAPI.params
 }
 
 // The number of parameters to be bound
