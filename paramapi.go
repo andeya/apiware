@@ -310,6 +310,11 @@ func (paramsAPI *ParamsAPI) Name() string {
 	return paramsAPI.name
 }
 
+// The number of parameters to be bound
+func (paramsAPI *ParamsAPI) Number() int {
+	return len(paramsAPI.params)
+}
+
 // return the ParamsAPI's original value
 func (paramsAPI *ParamsAPI) Raw() interface{} {
 	return paramsAPI.rawStruct
