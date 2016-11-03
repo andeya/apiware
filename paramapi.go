@@ -66,7 +66,7 @@ type (
 	ParamNameFunc func(fieldName string) (paramName string)
 
 	// Decode params from request body
-	BodyDecodeFunc func(paramValue reflect.Value, body []byte) error
+	BodyDecodeFunc func(dest reflect.Value, body []byte) error
 )
 
 var (

@@ -59,12 +59,12 @@ func snakeToUpperCamel(s string) string {
 	return buf.String()
 }
 
-func bodyJONS(fieldValue reflect.Value, body []byte) error {
+func bodyJONS(dest reflect.Value, body []byte) error {
 	var err error
-	if fieldValue.Kind() == reflect.Ptr {
-		err = json.Unmarshal(body, fieldValue.Interface())
+	if dest.Kind() == reflect.Ptr {
+		err = json.Unmarshal(body, dest.Interface())
 	} else {
-		err = json.Unmarshal(body, fieldValue.Addr().Interface())
+		err = json.Unmarshal(body, dest.Addr().Interface())
 	}
 	return err
 }
