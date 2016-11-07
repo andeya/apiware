@@ -129,7 +129,7 @@ func (param *Param) validateElem(value reflect.Value) (err error) {
 	obj := value.Interface()
 	// nonzero
 	if _, ok := param.tags["nonzero"]; ok {
-		if obj == reflect.Zero(value.Type()).Interface() {
+		if value.Kind() != reflect.Struct && obj == reflect.Zero(value.Type()).Interface() {
 			return NewValidationError(ValidationErrorValueNotSet, param.name)
 		}
 	}
