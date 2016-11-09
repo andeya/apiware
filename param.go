@@ -45,7 +45,8 @@ const (
 )
 
 var (
-	ParamTypes = map[string]bool{
+	// values for tag 'in'
+	TagInValues = map[string]bool{
 		"path":     true,
 		"query":    true,
 		"formData": true,
@@ -66,8 +67,8 @@ func (param *Param) Name() string {
 }
 
 // Get the type value for the param
-func (param *Param) Type() string {
-	return param.tags["type"]
+func (param *Param) In() string {
+	return param.tags["in"]
 }
 
 // IsRequired tests if the param is declared

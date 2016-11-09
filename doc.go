@@ -18,12 +18,12 @@ limitations under the License.
 Param tag value description:
     tag   |   key    | required |     value     |   desc
     ------|----------|----------|---------------|----------------------------------
-    param |   type   | only one |     path      | if `required` is unsetted, auto set it. e.g. url: "http://www.abc.com/a/{path}"
-    param |   type   | only one |     query     | e.g. url: "http://www.abc.com/a?b={query}"
-    param |   type   | only one |     formData  | e.g. "request body: a=123&b={formData}"
-    param |   type   | only one |     body      | request body can be any content
-    param |   type   | only one |     header    | request header info
-    param |   type   | only one |     cookie    | request cookie info, support type: `http.Cookie`,`fasthttp.Cookie`,`string`,`[]byte`
+    param |    in    | only one |     path      | (position of param) if `required` is unsetted, auto set it. e.g. url: "http://www.abc.com/a/{path}"
+    param |    in    | only one |     query     | (position of param) e.g. url: "http://www.abc.com/a?b={query}"
+    param |    in    | only one |     formData  | (position of param) e.g. "request body: a=123&b={formData}"
+    param |    in    | only one |     body      | (position of param) request body can be any content
+    param |    in    | only one |     header    | (position of param) request header info
+    param |    in    | only one |     cookie    | (position of param) request cookie info, support: `http.Cookie`,`fasthttp.Cookie`,`string`,`[]byte`
     param |   name   |    no    |  (e.g. "id")  | specify request param`s name
     param | required |    no    |   required    | request param is required
     param |   desc   |    no    |  (e.g. "id")  | request param description
@@ -39,10 +39,10 @@ Param tag value description:
         2. the binding struct's field can not be a pointer
         3. `regexp` or `param` tag is only usable when `param:"type(xxx)"` is exist
         4. if the `param` tag is not exist, anonymous field will be parsed
-        5. when the param's type is `formData` and the field's type is `multipart.FileHeader`, the param receives file uploaded
-        6. if param's type is `cookie`, field's type must be `http.Cookie`
-        7. `formData` and `body` params can not exist at the same time
-        8. there should not be more than one `body` param
+        5. when the param's position(`in`) is `formData` and the field's type is `multipart.FileHeader`, the param receives file uploaded
+        6. if param's position(`in`) is `cookie`, field's type must be `http.Cookie`
+        7. param tags `in(formData)` and `in(body)` can not exist at the same time
+        8. there should not be more than one `in(body)` param tag
 
 List of supported param value types:
     base    |   slice    | special

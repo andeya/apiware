@@ -162,32 +162,32 @@ func (m *ParamsAPI) addFields(parentIndexPath []int, t reflect.Type, v reflect.V
 		}
 
 		var parsedTags = parseTags(tag)
-		var paramType = parsedTags["type"]
+		var paramPosition = parsedTags["in"]
 		var paramTypeString = field.Type.String()
 
 		switch paramTypeString {
 		case fileTypeString:
-			if paramType != "formData" {
-				return NewError(t.String(), field.Name, "when field type is `"+paramTypeString+"`, param type must be `formData`")
+			if paramPosition != "formData" {
+				return NewError(t.String(), field.Name, "when field type is `"+paramTypeString+"`, tag `in` value must be `formData`")
 			}
 		case cookieTypeString, fasthttpCookieTypeString:
-			if paramType != "cookie" {
-				return NewError(t.String(), field.Name, "when field type is `"+paramTypeString+"`, param type must be `cookie`")
+			if paramPosition != "cookie" {
+				return NewError(t.String(), field.Name, "when field type is `"+paramTypeString+"`, tag `in` value must be `cookie`")
 			}
 		}
 
-		switch paramType {
+		switch paramPosition {
 		case "formData":
 			if hasBody {
-				return NewError(t.String(), field.Name, "`formData` and `body` params can not exist at the same time")
+				return NewError(t.String(), field.Name, "tags of `in(formData)` and `in(body)` can not exist at the same time")
 			}
 			hasFormData = true
 		case "body":
 			if hasFormData {
-				return NewError(t.String(), field.Name, "`formData` and `body` params can not exist at the same time")
+				return NewError(t.String(), field.Name, "tags of `in(formData)` and `in(body)` can not exist at the same time")
 			}
 			if hasBody {
-				return NewError(t.String(), field.Name, "there should not be more than one `body` param")
+				return NewError(t.String(), field.Name, "there should not be more than one tag `in(body)`")
 			}
 			hasBody = true
 		case "path":
@@ -196,11 +196,11 @@ func (m *ParamsAPI) addFields(parentIndexPath []int, t reflect.Type, v reflect.V
 			switch paramTypeString {
 			case cookieTypeString, fasthttpCookieTypeString, stringTypeString, bytesTypeString, bytes2TypeString:
 			default:
-				return NewError(t.String(), field.Name, "invalid field type for `cookie` param, refer to the following: `http.Cookie`, `fasthttp.Cookie`, `string`, `[]byte` or `[]uint8`")
+				return NewError(t.String(), field.Name, "invalid field type for `in(cookie)`, refer to the following: `http.Cookie`, `fasthttp.Cookie`, `string`, `[]byte` or `[]uint8`")
 			}
 		default:
-			if !ParamTypes[paramType] {
-				return NewError(t.String(), field.Name, "invalid field type, refer to the following: `path`, `query`, `formData`, `body`, `header` or `cookie`")
+			if !TagInValues[paramPosition] {
+				return NewError(t.String(), field.Name, "invalid tag `in` value, refer to the following: `path`, `query`, `formData`, `body`, `header` or `cookie`")
 			}
 		}
 		if _, ok := parsedTags["len"]; ok && paramTypeString != "string" && paramTypeString != "[]string" {
@@ -448,7 +448,7 @@ func (paramsAPI *ParamsAPI) BindFields(
 
 	for i, param := range paramsAPI.params {
 		value := fields[i]
-		switch param.Type() {
+		switch param.In() {
 		case "path":
 			paramValue, ok := pathParams.Get(param.name)
 			if !ok {
@@ -646,7 +646,7 @@ func (paramsAPI *ParamsAPI) FasthttpBindFields(
 	var formValues = fasthttpFormValues(reqCtx)
 	for i, param := range paramsAPI.params {
 		value := fields[i]
-		switch param.Type() {
+		switch param.In() {
 		case "path":
 			paramValue, ok := pathParams.Get(param.name)
 			if !ok {

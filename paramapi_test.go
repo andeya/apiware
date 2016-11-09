@@ -8,7 +8,7 @@ import (
 )
 
 func TestParsetags(t *testing.T) {
-	m := parseTags(`type(path),required,desc(banana)`)
+	m := parseTags(`in(path),required,desc(banana)`)
 	if x, ok := m["required"]; !ok {
 		t.Fatal("wrong value", ok, x)
 	}
@@ -43,10 +43,10 @@ func TestFieldIsZero(t *testing.T) {
 
 func TestFieldvalidate(t *testing.T) {
 	type Schema struct {
-		A string  `param:"type(path),len(3:6),name(p)" err:"This is a custom error!"`
-		B float32 `param:"type(query),range(10:20)"`
-		C string  `param:"type(query),len(:4),nonzero"`
-		D string  `param:"type(query)" regexp:"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"`
+		A string  `param:"in(path),len(3:6),name(p)" err:"This is a custom error!"`
+		B float32 `param:"in(query),range(10:20)"`
+		C string  `param:"in(query),len(:4),nonzero"`
+		D string  `param:"in(query)" regexp:"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$"`
 	}
 	m, _ := NewParamsAPI(&Schema{B: 9.999999}, nil, nil)
 	a := m.params[0]
@@ -119,15 +119,15 @@ func TestFieldOmit(t *testing.T) {
 
 func TestInterfaceNewParamsAPIWithEmbedded(t *testing.T) {
 	type third struct {
-		Num int64 `param:"type(query)"`
+		Num int64 `param:"in(query)"`
 	}
 	type embed struct {
-		Name  string `param:"type(query)"`
-		Value string `param:"type(query)"`
+		Name  string `param:"in(query)"`
+		Value string `param:"in(query)"`
 		third
 	}
 	type table struct {
-		ColPrimary int64 `param:"type(query)"`
+		ColPrimary int64 `param:"in(query)"`
 		embed
 	}
 	table1 := &table{
@@ -148,8 +148,8 @@ func TestInterfaceNewParamsAPIWithEmbedded(t *testing.T) {
 }
 
 type indexedTable struct {
-	ColIsRequired string `param:"type(query),required"`
-	ColVarChar    string `param:"type(query),desc(banana)"`
+	ColIsRequired string `param:"in(query),required"`
+	ColVarChar    string `param:"in(query),desc(banana)"`
 	ColTime       time.Time
 }
 
