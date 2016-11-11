@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -326,6 +327,17 @@ func (paramsAPI *ParamsAPI) Raw() interface{} {
 	return paramsAPI.rawStructPointer
 }
 
+// get maxMemory
+// when request Content-Type is multipart/form-data, the max memory for body.
+func (paramsAPI *ParamsAPI) MaxMemory() int64 {
+	return paramsAPI.maxMemory
+}
+
+// set maxMemory for the request which Content-Type is multipart/form-data.
+func (paramsAPI *ParamsAPI) SetMaxMemory(maxMemory int64) {
+	paramsAPI.maxMemory = maxMemory
+}
+
 // Creates a new struct pointer and the field's values  for its receive parameterste it.
 func (paramsAPI *ParamsAPI) NewReceiver() (interface{}, []reflect.Value) {
 	object := reflect.New(paramsAPI.structType)
@@ -432,14 +444,13 @@ func (paramsAPI *ParamsAPI) BindFields(
 ) (
 	err error,
 ) {
-	if err = req.ParseForm(); err != nil {
-		return NewError(paramsAPI.name, "*", err.Error())
-	}
-
 	if pathParams == nil {
 		pathParams = Map(map[string]string{})
 	}
-
+	if req.Form == nil {
+		req.ParseMultipartForm(paramsAPI.maxMemory)
+	}
+	var queryValues url.Values
 	defer func() {
 		if p := recover(); p != nil {
 			err = NewError(paramsAPI.name, "?", fmt.Sprint(p))
@@ -460,7 +471,13 @@ func (paramsAPI *ParamsAPI) BindFields(
 			}
 
 		case "query":
-			paramValues, ok := req.Form[param.name]
+			if queryValues == nil {
+				queryValues, err = url.ParseQuery(req.URL.RawQuery)
+				if err != nil {
+					queryValues = make(url.Values)
+				}
+			}
+			paramValues, ok := queryValues[param.name]
 			if ok {
 				if err = convertAssign(value, paramValues); err != nil {
 					return NewError(paramsAPI.name, param.name, err.Error())
@@ -471,25 +488,23 @@ func (paramsAPI *ParamsAPI) BindFields(
 
 		case "formData":
 			// Can not exist with `body` param at the same time
-			if req.MultipartForm == nil {
-				if err = req.ParseMultipartForm(paramsAPI.maxMemory); err != nil {
-					return NewError(paramsAPI.name, param.name, err.Error())
-				}
-			}
-
-			if param.IsFile() && req.MultipartForm != nil && req.MultipartForm.File != nil {
-				fhs := req.MultipartForm.File[param.name]
-				if len(fhs) == 0 {
-					if param.IsRequired() {
-						return NewError(paramsAPI.name, param.name, "missing formData param")
+			if param.IsFile() {
+				if req.MultipartForm != nil {
+					fhs := req.MultipartForm.File[param.name]
+					if len(fhs) == 0 {
+						if param.IsRequired() {
+							return NewError(paramsAPI.name, param.name, "missing formData param")
+						}
+						continue
 					}
-					continue
+					value.Set(reflect.ValueOf(fhs[0]).Elem())
+				} else if param.IsRequired() {
+					return NewError(paramsAPI.name, param.name, "missing formData param")
 				}
-				value.Set(reflect.ValueOf(fhs[0]).Elem())
 				continue
 			}
 
-			paramValues, ok := req.Form[param.name]
+			paramValues, ok := req.PostForm[param.name]
 			if ok {
 				if err = convertAssign(value, paramValues); err != nil {
 					return NewError(paramsAPI.name, param.name, err.Error())
