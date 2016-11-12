@@ -193,12 +193,12 @@ func (m *ParamsAPI) addFields(parentIndexPath []int, t reflect.Type, v reflect.V
 			hasBody = true
 		case "path":
 			parsedTags["required"] = "required"
-		case "cookie":
-			switch paramTypeString {
-			case cookieTypeString, fasthttpCookieTypeString, stringTypeString, bytesTypeString, bytes2TypeString:
-			default:
-				return NewError(t.String(), field.Name, "invalid field type for `in(cookie)`, refer to the following: `http.Cookie`, `fasthttp.Cookie`, `string`, `[]byte` or `[]uint8`")
-			}
+		// case "cookie":
+		// 	switch paramTypeString {
+		// 	case cookieTypeString, fasthttpCookieTypeString, stringTypeString, bytesTypeString, bytes2TypeString:
+		// 	default:
+		// 		return NewError(t.String(), field.Name, "invalid field type for `in(cookie)`, refer to the following: `http.Cookie`, `fasthttp.Cookie`, `string`, `[]byte` or `[]uint8`")
+		// 	}
 		default:
 			if !TagInValues[paramPosition] {
 				return NewError(t.String(), field.Name, "invalid tag `in` value, refer to the following: `path`, `query`, `formData`, `body`, `header` or `cookie`")
@@ -542,15 +542,10 @@ func (paramsAPI *ParamsAPI) BindFields(
 				switch value.Type().String() {
 				case cookieTypeString:
 					value.Set(reflect.ValueOf(c).Elem())
-
-				case stringTypeString:
-					value.Set(reflect.ValueOf(c.String()))
-
-				case bytesTypeString, bytes2TypeString:
-					value.Set(reflect.ValueOf([]byte(c.String())))
-
 				default:
-					return NewError(paramsAPI.name, param.name, "invalid cookie param type, it must be `http.Cookie`, `string` or `[]byte`")
+					if err = convertAssign(value, []string{c.Value}); err != nil {
+						return NewError(paramsAPI.name, param.name, err.Error())
+					}
 				}
 			} else if param.IsRequired() {
 				return NewError(paramsAPI.name, param.name, "missing cookie param")
@@ -742,16 +737,11 @@ func (paramsAPI *ParamsAPI) FasthttpBindFields(
 					}
 					value.Set(reflect.ValueOf(*c))
 
-				case stringTypeString:
-					value.Set(reflect.ValueOf(string(bcookie)))
-
-				case bytesTypeString, bytes2TypeString:
-					value.Set(reflect.ValueOf(bcookie))
-
 				default:
-					return NewError(paramsAPI.name, param.name, "invalid cookie param type, it must be `fasthttp.Cookie`, `string` or `[]byte`")
+					if err = convertAssign(value, []string{string(bcookie)}); err != nil {
+						return NewError(paramsAPI.name, param.name, err.Error())
+					}
 				}
-
 			} else if param.IsRequired() {
 				return NewError(paramsAPI.name, param.name, "missing cookie param")
 			}

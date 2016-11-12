@@ -12,7 +12,7 @@ type fasthttpTestApiware struct {
 	Num       float32  `param:"in(query),name(n),range(0.1:10.19)"`
 	Title     string   `param:"in(query),nonzero"`
 	Paragraph []string `param:"in(query),name(p),len(1:10)" regexp:"(^[\\w]*$)"`
-	Cookie    string   `param:"in(cookie),name(apiwareid)"`
+	Cookie    int      `param:"in(cookie),name(apiwareid)"`
 	// Picture   multipart.FileHeader `param:"in(formData),name(pic),maxmb(30)"`
 }
 
@@ -20,7 +20,7 @@ func fasthttpTestHandler(ctx *fasthttp.RequestCtx) {
 	// set cookies
 	var c fasthttp.Cookie
 	c.SetKey("apiwareid")
-	c.SetValue("fasthttp_henrylee2cn")
+	c.SetValue("123")
 	ctx.Response.Header.SetCookie(&c)
 
 	// bind params
