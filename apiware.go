@@ -17,8 +17,7 @@ package apiware
 import (
 	"errors"
 	"net/http"
-
-	"github.com/valyala/fasthttp"
+	// "github.com/valyala/fasthttp"
 )
 
 type (
@@ -68,10 +67,4 @@ func (a *Apiware) Bind(
 	pattern string,
 ) error {
 	return Bind(structPointer, req, a.PathDecodeFunc(req.URL.Path, pattern))
-}
-
-// Bind the fasthttp request params to the structure and validate.
-// note: structPointer must be structure pointer.
-func (a *Apiware) FasthttpBind(structPointer interface{}, reqCtx *fasthttp.RequestCtx, pattern string) (err error) {
-	return FasthttpBind(structPointer, reqCtx, a.PathDecodeFunc(string(reqCtx.Path()), pattern))
 }

@@ -18,26 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"mime/multipart"
+	// "mime/multipart"
 	"net/http"
 	"net/url"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
-
-	"github.com/valyala/fasthttp"
-)
-
-const (
-	TAG_PARAM        = "param"  //request param tag name
-	TAG_REGEXP       = "regexp" //regexp validate tag name(optio)
-	TAG_ERR          = "err"    //customize the prompt for validation error(optio)
-	TAG_IGNORE_PARAM = "-"      //ignore request param tag value
-
-	MB                 = 1 << 20 // 1MB
-	defaultMaxMemory   = 32 * MB // 32 MB
-	defaultMaxMemoryMB = 32
+	// "github.com/valyala/fasthttp"
 )
 
 type (
@@ -162,7 +149,7 @@ func (m *ParamsAPI) addFields(parentIndexPath []int, t reflect.Type, v reflect.V
 			return NewError(t.String(), field.Name, "field can not be a pointer")
 		}
 
-		var parsedTags = parseTags(tag)
+		var parsedTags = ParseTags(tag)
 		var paramPosition = parsedTags["in"]
 		var paramTypeString = field.Type.String()
 
@@ -264,20 +251,6 @@ func (m *ParamsAPI) addFields(parentIndexPath []int, t reflect.Type, v reflect.V
 		m.maxMemory = defaultMaxMemory
 	}
 	return nil
-}
-
-func parseTags(s string) map[string]string {
-	c := strings.Split(s, ",")
-	m := make(map[string]string)
-	for _, v := range c {
-		c2 := strings.Split(v, "(")
-		if len(c2) == 2 && len(c2[1]) > 1 {
-			m[c2[0]] = c2[1][:len(c2[1])-1]
-		} else {
-			m[v] = ""
-		}
-	}
-	return m
 }
 
 // get the `*ParamsAPI` object according to the type name
@@ -556,226 +529,4 @@ func (paramsAPI *ParamsAPI) BindFields(
 		}
 	}
 	return
-}
-
-// Bind the fasthttp request params to a new struct pointer and validate it.
-func FasthttpBindByName(
-	paramsAPIName string,
-	reqCtx *fasthttp.RequestCtx,
-	pathParams KV,
-) (
-	interface{},
-	error,
-) {
-	paramsAPI, err := GetParamsAPI(paramsAPIName)
-	if err != nil {
-		return nil, err
-	}
-	return paramsAPI.FasthttpBindNew(reqCtx, pathParams)
-}
-
-// Bind the fasthttp request params to the `structPointer` param and validate it.
-// note: structPointer must be struct pointer.
-func FasthttpBind(
-	structPointer interface{},
-	reqCtx *fasthttp.RequestCtx,
-	pathParams KV,
-) error {
-	paramsAPI, err := GetParamsAPI(reflect.TypeOf(structPointer).String())
-	if err != nil {
-		return err
-	}
-	return paramsAPI.FasthttpBindAt(structPointer, reqCtx, pathParams)
-}
-
-// Bind the fasthttp request params to a struct pointer and validate it.
-// note: structPointer must be struct pointer.
-func (paramsAPI *ParamsAPI) FasthttpBindAt(
-	structPointer interface{},
-	reqCtx *fasthttp.RequestCtx,
-	pathParams KV,
-) error {
-	name := reflect.TypeOf(structPointer).String()
-	if name != paramsAPI.name {
-		return errors.New("the structPointer's type `" + name + "` does not match type `" + paramsAPI.name + "`")
-	}
-	return paramsAPI.FasthttpBindFields(
-		paramsAPI.fieldsForBinding(reflect.ValueOf(structPointer).Elem()),
-		reqCtx,
-		pathParams,
-	)
-}
-
-// Bind the fasthttp request params to a struct pointer and validate it.
-func (paramsAPI *ParamsAPI) FasthttpBindNew(
-	reqCtx *fasthttp.RequestCtx,
-	pathParams KV,
-) (
-	interface{},
-	error,
-) {
-	structPointer, fields := paramsAPI.NewReceiver()
-	return structPointer, paramsAPI.FasthttpBindFields(fields, reqCtx, pathParams)
-}
-
-// Bind the fasthttp request params to the original struct pointer and validate it.
-func (paramsAPI *ParamsAPI) FasthttpRawBind(
-	reqCtx *fasthttp.RequestCtx,
-	pathParams KV,
-) (
-	interface{},
-	error,
-) {
-	var fields []reflect.Value
-	for _, param := range paramsAPI.params {
-		fields = append(fields, param.rawValue)
-	}
-	err := paramsAPI.FasthttpBindFields(fields, reqCtx, pathParams)
-	return paramsAPI.rawStructPointer, err
-}
-
-// Bind the fasthttp request params to the struct and validate.
-// Must ensure that the param `fields` matches `paramsAPI.params`.
-func (paramsAPI *ParamsAPI) FasthttpBindFields(
-	fields []reflect.Value,
-	reqCtx *fasthttp.RequestCtx,
-	pathParams KV,
-) (
-	err error,
-) {
-	if pathParams == nil {
-		pathParams = Map(map[string]string{})
-	}
-
-	defer func() {
-		if p := recover(); p != nil {
-			err = NewError(paramsAPI.name, "?", fmt.Sprint(p))
-		}
-	}()
-
-	var formValues = fasthttpFormValues(reqCtx)
-	for i, param := range paramsAPI.params {
-		value := fields[i]
-		switch param.In() {
-		case "path":
-			paramValue, ok := pathParams.Get(param.name)
-			if !ok {
-				return NewError(paramsAPI.name, param.name, "missing path param")
-			}
-			// fmt.Printf("paramName:%s\nvalue:%#v\n\n", param.name, paramValue)
-			if err = convertAssign(value, []string{paramValue}); err != nil {
-				return NewError(paramsAPI.name, param.name, err.Error())
-			}
-
-		case "query":
-			paramValuesBytes := reqCtx.QueryArgs().PeekMulti(param.name)
-			if len(paramValuesBytes) > 0 {
-				var paramValues = make([]string, len(paramValuesBytes))
-				for i, b := range paramValuesBytes {
-					paramValues[i] = string(b)
-				}
-				if err = convertAssign(value, paramValues); err != nil {
-					return NewError(paramsAPI.name, param.name, err.Error())
-				}
-			} else if len(paramValuesBytes) == 0 && param.IsRequired() {
-				return NewError(paramsAPI.name, param.name, "missing query param")
-			}
-
-		case "formData":
-			// Can not exist with `body` param at the same time
-			if param.IsFile() {
-				var fh *multipart.FileHeader
-				if fh, err = reqCtx.FormFile(param.name); err != nil {
-					if param.IsRequired() {
-						return NewError(paramsAPI.name, param.name, "missing formData param")
-					}
-					continue
-				}
-				value.Set(reflect.ValueOf(fh).Elem())
-				continue
-			}
-
-			paramValues, ok := formValues[param.name]
-			if ok {
-				if err = convertAssign(value, paramValues); err != nil {
-					return NewError(paramsAPI.name, param.name, err.Error())
-				}
-			} else if param.IsRequired() {
-				return NewError(paramsAPI.name, param.name, "missing formData param")
-			}
-
-		case "body":
-			// Theoretically there should be at most one `body` param, and can not exist with `formData` at the same time
-			body := reqCtx.PostBody()
-			if body != nil {
-				if err = paramsAPI.bodyDecodeFunc(value, body); err != nil {
-					return NewError(paramsAPI.name, param.name, err.Error())
-				}
-			} else if param.IsRequired() {
-				return NewError(paramsAPI.name, param.name, "missing body param")
-			}
-
-		case "header":
-			paramValueBytes := reqCtx.Request.Header.Peek(param.name)
-			if paramValueBytes != nil {
-				if err = convertAssign(value, []string{string(paramValueBytes)}); err != nil {
-					return NewError(paramsAPI.name, param.name, err.Error())
-				}
-			} else if param.IsRequired() {
-				return NewError(paramsAPI.name, param.name, "missing header param")
-			}
-
-		case "cookie":
-			bcookie := reqCtx.Request.Header.Cookie(param.name)
-			if bcookie != nil {
-				switch value.Type().String() {
-				case fasthttpCookieTypeString:
-					c := fasthttp.AcquireCookie()
-					defer fasthttp.ReleaseCookie(c)
-					if err = c.ParseBytes(bcookie); err != nil {
-						return NewError(paramsAPI.name, param.name, err.Error())
-					}
-					value.Set(reflect.ValueOf(*c))
-
-				default:
-					if err = convertAssign(value, []string{string(bcookie)}); err != nil {
-						return NewError(paramsAPI.name, param.name, err.Error())
-					}
-				}
-			} else if param.IsRequired() {
-				return NewError(paramsAPI.name, param.name, "missing cookie param")
-			}
-		}
-		if err = param.validate(value); err != nil {
-			return err
-		}
-	}
-	return
-}
-
-// fasthttpFormValues returns all post data values with their keys
-// multipart, formValues data, post arguments
-func fasthttpFormValues(reqCtx *fasthttp.RequestCtx) map[string][]string {
-	// first check if we have multipart formValues
-	multipartForm, err := reqCtx.MultipartForm()
-	if err == nil {
-		//we have multipart formValues
-		return multipartForm.Value
-	}
-	valuesAll := make(map[string][]string)
-	// if no multipart and post arguments ( means normal formValues   )
-	if reqCtx.PostArgs().Len() == 0 {
-		return valuesAll // no found
-	}
-	reqCtx.PostArgs().VisitAll(func(k []byte, v []byte) {
-		key := string(k)
-		value := string(v)
-		// for slices
-		if valuesAll[key] != nil {
-			valuesAll[key] = append(valuesAll[key], value)
-		} else {
-			valuesAll[key] = []string{value}
-		}
-	})
-	return valuesAll
 }

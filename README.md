@@ -99,7 +99,7 @@ param |    in    | only one |     query     | (position of param) e.g. url: "htt
 param |    in    | only one |     formData  | (position of param) e.g. "request body: a=123&b={formData}"
 param |    in    | only one |     body      | (position of param) request body can be any content
 param |    in    | only one |     header    | (position of param) request header info
-param |    in    | only one |     cookie    | (position of param) request cookie info, support: `http.Cookie`, `fasthttp.Cookie`, `string`, `[]byte` and so on
+param |    in    | only one |     cookie    | (position of param) request cookie info, support: `http.Cookie`,`fasthttp.Cookie`,`string`,`[]byte`
 param |   name   |    no    |  (e.g. "id")  | specify request param`s name
 param | required |    no    |   required    | request param is required
 param |   desc   |    no    |  (e.g. "id")  | request param description

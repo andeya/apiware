@@ -32,15 +32,11 @@ func main() {
 	// Check whether these structs meet the requirements of apiware, and register them
 	err := myApiware.Register(
 		new(httpTestApiware),
-		new(fasthttpTestApiware),
 	)
 	if err != nil {
 		panic(err)
 	}
 
 	// http server
-	go httpServer(":8080")
-
-	// fasthttp server
-	fasthttpServer(":8081")
+	httpServer(":8080")
 }

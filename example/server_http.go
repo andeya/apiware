@@ -7,12 +7,12 @@ import (
 )
 
 type httpTestApiware struct {
-	Id           int         `param:"in(path),required,desc(ID),range(1:2)"`
-	Num          float32     `param:"in(query),name(n),range(0.1:10.19)"`
-	Title        string      `param:"in(query),nonzero"`
-	Paragraph    []string    `param:"in(query),name(p),len(1:10)" regexp:"(^[\\w]*$)"`
-	Cookie       http.Cookie `param:"in(cookie),name(apiwareid),nonzero"`
-	CookieString string      `param:"in(cookie),name(apiwareid)"`
+	Id          int         `param:"in(path),required,desc(ID),range(1:2)"`
+	Num         float32     `param:"in(query),name(n),range(0.1:10.19)"`
+	Title       string      `param:"in(query),nonzero"`
+	Paragraph   []string    `param:"in(query),name(p),len(1:10)" regexp:"(^[\\w]*$)"`
+	Cookie      http.Cookie `param:"in(cookie),name(apiwareid),nonzero"`
+	CookieValue int         `param:"in(cookie),name(apiwareid)"`
 	// Picture   multipart.FileHeader `param:"in(formData),name(pic),maxmb(30)"`
 }
 
@@ -20,7 +20,7 @@ func httpTestHandler(resp http.ResponseWriter, req *http.Request) {
 	// set cookies
 	http.SetCookie(resp, &http.Cookie{
 		Name:  "apiwareid",
-		Value: "http_henrylee2cn",
+		Value: "123",
 	})
 
 	// bind params
