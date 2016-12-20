@@ -24,7 +24,8 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
-	// "github.com/valyala/fasthttp"
+
+	"github.com/valyala/fasthttp"
 )
 
 type (
@@ -158,7 +159,7 @@ func (m *ParamsAPI) addFields(parentIndexPath []int, t reflect.Type, v reflect.V
 			if paramPosition != "formData" {
 				return NewError(t.String(), field.Name, "when field type is `"+paramTypeString+"`, tag `in` value must be `formData`")
 			}
-		case cookieTypeString /*, fasthttpCookieTypeString*/ :
+		case cookieTypeString, fasthttpCookieTypeString:
 			if paramPosition != "cookie" {
 				return NewError(t.String(), field.Name, "when field type is `"+paramTypeString+"`, tag `in` value must be `cookie`")
 			}
@@ -531,4 +532,224 @@ func (paramsAPI *ParamsAPI) BindFields(
 		}
 	}
 	return
+}
+
+// FasthttpBindByName binds the net/http request params to a new struct and validate it.
+func FasthttpBindByName(
+	paramsAPIName string,
+	req *fasthttp.RequestCtx,
+	pathParams KV,
+) (
+	interface{},
+	error,
+) {
+	paramsAPI, err := GetParamsAPI(paramsAPIName)
+	if err != nil {
+		return nil, err
+	}
+	return paramsAPI.FasthttpBindNew(req, pathParams)
+}
+
+// FasthttpBind binds the net/http request params to the `structPointer` param and validate it.
+// note: structPointer must be struct pointer.
+func FasthttpBind(
+	structPointer interface{},
+	req *fasthttp.RequestCtx,
+	pathParams KV,
+) error {
+	paramsAPI, err := GetParamsAPI(reflect.TypeOf(structPointer).String())
+	if err != nil {
+		return err
+	}
+	return paramsAPI.FasthttpBindAt(structPointer, req, pathParams)
+}
+
+// FasthttpBindAt binds the net/http request params to a struct pointer and validate it.
+// note: structPointer must be struct pointer.
+func (paramsAPI *ParamsAPI) FasthttpBindAt(
+	structPointer interface{},
+	req *fasthttp.RequestCtx,
+	pathParams KV,
+) error {
+	name := reflect.TypeOf(structPointer).String()
+	if name != paramsAPI.name {
+		return errors.New("the structPointer's type `" + name + "` does not match type `" + paramsAPI.name + "`")
+	}
+	return paramsAPI.FasthttpBindFields(
+		paramsAPI.fieldsForBinding(reflect.ValueOf(structPointer).Elem()),
+		req,
+		pathParams,
+	)
+}
+
+// FasthttpBindNew binds the net/http request params to a struct pointer and validate it.
+func (paramsAPI *ParamsAPI) FasthttpBindNew(
+	req *fasthttp.RequestCtx,
+	pathParams KV,
+) (
+	interface{},
+	error,
+) {
+	structPrinter, fields := paramsAPI.NewReceiver()
+	err := paramsAPI.FasthttpBindFields(fields, req, pathParams)
+	return structPrinter, err
+}
+
+// RawBind binds the net/http request params to the original struct pointer and validate it.
+func (paramsAPI *ParamsAPI) FasthttpRawBind(
+	req *fasthttp.RequestCtx,
+	pathParams KV,
+) (
+	interface{},
+	error,
+) {
+	var fields []reflect.Value
+	for _, param := range paramsAPI.params {
+		fields = append(fields, param.rawValue)
+	}
+	err := paramsAPI.FasthttpBindFields(fields, req, pathParams)
+	return paramsAPI.rawStructPointer, err
+}
+
+// FasthttpBindFields binds the net/http request params to a struct and validate it.
+// Must ensure that the param `fields` matches `paramsAPI.params`.
+func (paramsAPI *ParamsAPI) FasthttpBindFields(
+	fields []reflect.Value,
+	req *fasthttp.RequestCtx,
+	pathParams KV,
+) (
+	err error,
+) {
+	if pathParams == nil {
+		pathParams = Map(map[string]string{})
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			err = NewError(paramsAPI.name, "?", fmt.Sprint(p))
+		}
+	}()
+
+	var formValues = fasthttpFormValues(req)
+	for i, param := range paramsAPI.params {
+		value := fields[i]
+		switch param.In() {
+		case "path":
+			paramValue, ok := pathParams.Get(param.name)
+			if !ok {
+				return param.myError("missing path param")
+			}
+			// fmt.Printf("paramName:%s\nvalue:%#v\n\n", param.name, paramValue)
+			if err = convertAssign(value, []string{paramValue}); err != nil {
+				return param.myError(err.Error())
+			}
+
+		case "query":
+			paramValuesBytes := req.QueryArgs().PeekMulti(param.name)
+			if len(paramValuesBytes) > 0 {
+				var paramValues = make([]string, len(paramValuesBytes))
+				for i, b := range paramValuesBytes {
+					paramValues[i] = string(b)
+				}
+				if err = convertAssign(value, paramValues); err != nil {
+					return param.myError(err.Error())
+				}
+			} else if len(paramValuesBytes) == 0 && param.IsRequired() {
+				return param.myError("missing query param")
+			}
+
+		case "formData":
+			// Can not exist with `body` param at the same time
+			if param.IsFile() {
+				if fh, err := req.FormFile(param.name); err == nil {
+					value.Set(reflect.ValueOf(fh).Elem())
+				} else if param.IsRequired() {
+					return param.myError("missing formData param")
+				}
+				continue
+			}
+
+			paramValues, ok := formValues[param.name]
+			if ok {
+				if err = convertAssign(value, paramValues); err != nil {
+					return param.myError(err.Error())
+				}
+			} else if param.IsRequired() {
+				return param.myError("missing formData param")
+			}
+
+		case "body":
+			// Theoretically there should be at most one `body` param, and can not exist with `formData` at the same time
+			body := req.PostBody()
+			if body != nil {
+				if err = paramsAPI.bodyDecodeFunc(value, body); err != nil {
+					return param.myError(err.Error())
+				}
+			} else if param.IsRequired() {
+				return param.myError("missing body param")
+			}
+
+		case "header":
+			paramValueBytes := req.Request.Header.Peek(param.name)
+			if paramValueBytes != nil {
+				if err = convertAssign(value, []string{string(paramValueBytes)}); err != nil {
+					return param.myError(err.Error())
+				}
+			} else if param.IsRequired() {
+				return param.myError("missing header param")
+			}
+
+		case "cookie":
+			bcookie := req.Request.Header.Cookie(param.name)
+			if bcookie != nil {
+				switch value.Type().String() {
+				case fasthttpCookieTypeString:
+					c := fasthttp.AcquireCookie()
+					defer fasthttp.ReleaseCookie(c)
+					if err = c.ParseBytes(bcookie); err != nil {
+						return param.myError(err.Error())
+					}
+					value.Set(reflect.ValueOf(*c))
+
+				default:
+					if err = convertAssign(value, []string{string(bcookie)}); err != nil {
+						return param.myError(err.Error())
+					}
+				}
+			} else if param.IsRequired() {
+				return param.myError("missing cookie param")
+			}
+		}
+		if err = param.validate(value); err != nil {
+			return err
+		}
+	}
+	return
+}
+
+// fasthttpFormValues returns all post data values with their keys
+// multipart, formValues data, post arguments
+func fasthttpFormValues(req *fasthttp.RequestCtx) map[string][]string {
+	// first check if we have multipart formValues
+	multipartForm, err := req.MultipartForm()
+	if err == nil {
+		//we have multipart formValues
+		return multipartForm.Value
+	}
+	valuesAll := make(map[string][]string)
+	// if no multipart and post arguments ( means normal formValues   )
+	if req.PostArgs().Len() == 0 {
+		return valuesAll // no found
+	}
+	req.PostArgs().VisitAll(func(k []byte, v []byte) {
+		key := string(k)
+		value := string(v)
+		// for slices
+		if valuesAll[key] != nil {
+			valuesAll[key] = append(valuesAll[key], value)
+		} else {
+			valuesAll[key] = []string{value}
+		}
+	})
+	return valuesAll
 }

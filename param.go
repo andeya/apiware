@@ -77,12 +77,12 @@ type Param struct {
 }
 
 const (
-	fileTypeString   = "multipart.FileHeader"
-	cookieTypeString = "http.Cookie"
-	// fasthttpCookieTypeString = "fasthttp.Cookie"
-	stringTypeString = "string"
-	bytesTypeString  = "[]byte"
-	bytes2TypeString = "[]uint8"
+	fileTypeString           = "multipart.FileHeader"
+	cookieTypeString         = "http.Cookie"
+	fasthttpCookieTypeString = "fasthttp.Cookie"
+	stringTypeString         = "string"
+	bytesTypeString          = "[]byte"
+	bytes2TypeString         = "[]uint8"
 )
 
 var (
